@@ -98,6 +98,11 @@ jobs:
               *) echo "IPK is not architecture-independent: $package_name" >&2; exit 1 ;;
             esac
           fi
+          package_size=$(stat --format='%s' "${packages[0]}")
+          if [ "$package_size" -gt 262144 ]; then
+            echo "control package exceeds 256 KiB and may contain an embedded core: $package_name" >&2
+            exit 1
+          fi
           (cd "$artifact_dir" && sha256sum "$package_name" >SHA256SUMS)
           file "$artifact_dir/$package_name" >"$artifact_dir/FILE-TYPE"
           stat --printf='%n %s bytes\n' "$artifact_dir/$package_name" >"$artifact_dir/SIZE"

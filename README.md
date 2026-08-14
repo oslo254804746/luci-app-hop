@@ -87,7 +87,9 @@ Only x86/64 SDKs are needed because the package itself is architecture
 independent. The downloaded Hop core is selected on the router at runtime.
 The workflow verifies every SDK checksum. Runtime dependencies are recorded in
 the package metadata without fetching or compiling LuCI feeds, and the workflow
-does not check out or compile `hop-rs`.
+does not check out or compile `hop-rs`. A 256 KiB package-size gate prevents an
+architecture-specific Hop core from being embedded accidentally; current
+control packages are only a few kilobytes.
 
 Run the fast repository tests locally with:
 

@@ -15,9 +15,13 @@ printf '%s\n' '#!/bin/sh' "printf 'hop-server 0.2.0\\n'" >"$build_dir/hop-server
 chmod 0755 "$build_dir/hop-server"
 tar -czf "$release_dir/hop-server-linux-x86_64-musl.tar.gz" \
 	-C "$build_dir" hop-server
+tar -czf "$release_dir/hop-server-linux-aarch64-musl.tar.gz" \
+	-C "$build_dir" hop-server
 (
 	cd "$release_dir"
-	sha256sum hop-server-linux-x86_64-musl.tar.gz >SHA256SUMS
+	sha256sum \
+		hop-server-linux-aarch64-musl.tar.gz \
+		hop-server-linux-x86_64-musl.tar.gz >SHA256SUMS
 )
 
 manager_env=(
@@ -33,6 +37,17 @@ test -x "$core_dir/hop-server"
 test "$("$core_dir/hop-server" --version)" = 'hop-server 0.2.0'
 env "${manager_env[@]}" "$manager" status | grep -Fq $'installed\tyes'
 test "$(env HOP_ARCH=aarch64 "$manager" arch)" = aarch64
+
+aarch64_core_dir=$run_dir/core-aarch64
+env \
+	HOP_ARCH=aarch64 \
+	HOP_CORE_DIR="$aarch64_core_dir" \
+	HOP_LOCK_DIR="$run_dir/hop-core-aarch64.lock" \
+	HOP_CORE_VERSION=latest \
+	HOP_RELEASE_BASE="file://$run_dir/releases" \
+	"$manager" install
+test -x "$aarch64_core_dir/hop-server"
+test "$("$aarch64_core_dir/hop-server" --version)" = 'hop-server 0.2.0'
 
 before=$(sha256sum "$core_dir/hop-server" | awk '{ print $1 }')
 printf 'tampered' >>"$release_dir/hop-server-linux-x86_64-musl.tar.gz"

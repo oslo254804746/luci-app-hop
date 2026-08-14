@@ -44,6 +44,7 @@ grep -Fq 'EXTRA_DEPENDS:=luci-base (>=0), curl (>=0), ca-bundle (>=0)' "$makefil
 grep -Fq 'define Build/Compile' "$makefile"
 grep -Fq "\$(INSTALL_BIN) ./root/usr/share/hop/hop-core" "$makefile"
 grep -Fq "\$(INSTALL_DATA) ./htdocs/luci-static/resources/view/hop/settings.js" "$makefile"
+grep -Fq 'package_size" -gt 262144' "$repo_dir/.github/workflows/openwrt-sdk.yml"
 
 if grep -Eiq 'rust-package\.mk|Build/Compile/Cargo|HOP_SOURCE_|PKG_SOURCE|USE_SOURCE_DIR' "$makefile"; then
 	echo 'LuCI package must not fetch or compile the Hop Rust core' >&2
