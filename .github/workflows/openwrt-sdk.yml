@@ -8,7 +8,7 @@ on:
       hop_ref:
         description: hop-rs branch, tag, or full commit to build
         required: true
-        default: main
+        default: master
 
 permissions:
   contents: read
@@ -46,7 +46,7 @@ jobs:
       OPENWRT_PACKAGES_COMMIT: 5caa62e0bc9f7fb9b0c12a23267bceb7724214dd
       SDK_ARCHIVE: ${{ matrix.sdk_archive }}
       SDK_SHA256: ${{ matrix.sdk_sha256 }}
-      HOP_REF: ${{ inputs.hop_ref || 'main' }}
+      HOP_REF: ${{ inputs.hop_ref || 'master' }}
     steps:
       - name: Check out package repository
         uses: actions/checkout@v4

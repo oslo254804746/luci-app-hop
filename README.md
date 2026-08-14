@@ -69,7 +69,7 @@ Pushes to `dev` run package-boundary checks and parallel official OpenWrt
 SHA-256 before extraction, pins the OpenWrt packages feed commit, uploads the
 resulting APK plus checksums and size metadata, and never publishes a release.
 
-Push builds use `hop-rs@main`. A manual workflow dispatch accepts any branch,
+Push builds use `hop-rs@master`. A manual workflow dispatch accepts any branch,
 tag, or full commit in the `hop_ref` input, which is the required path for
 testing a not-yet-merged Hop core branch. CI uses `USE_SOURCE_DIR`, so the
 all-zero mirror hash in that validation command is ignored; release builds must
