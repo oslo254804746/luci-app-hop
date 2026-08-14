@@ -85,8 +85,9 @@ Pushes to `dev` run structural tests and two official SDK packaging checks:
 
 Only x86/64 SDKs are needed because the package itself is architecture
 independent. The downloaded Hop core is selected on the router at runtime.
-The workflow verifies every SDK checksum and pins both the OpenWrt packages and
-LuCI feed commits. It does not check out or compile `hop-rs`.
+The workflow verifies every SDK checksum. Runtime dependencies are recorded in
+the package metadata without fetching or compiling LuCI feeds, and the workflow
+does not check out or compile `hop-rs`.
 
 Run the fast repository tests locally with:
 

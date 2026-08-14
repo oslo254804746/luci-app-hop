@@ -17,7 +17,7 @@ define Package/luci-app-hop
   SUBMENU:=3. Applications
   TITLE:=LuCI support for Hop
   URL:=https://github.com/oslo254804746/luci-app-hop
-  DEPENDS:=+luci-base +curl +ca-bundle
+  EXTRA_DEPENDS:=luci-base (>=0), curl (>=0), ca-bundle (>=0)
   USERID:=hop=514:hop=514
 endef
 

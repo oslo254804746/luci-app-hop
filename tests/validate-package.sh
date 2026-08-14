@@ -40,13 +40,18 @@ python3 -m json.tool "$acl_json" >/dev/null
 
 grep -Fq 'PKG_NAME:=luci-app-hop' "$makefile"
 grep -Fq 'PKGARCH:=all' "$makefile"
-grep -Fq 'DEPENDS:=+luci-base +curl +ca-bundle' "$makefile"
+grep -Fq 'EXTRA_DEPENDS:=luci-base (>=0), curl (>=0), ca-bundle (>=0)' "$makefile"
 grep -Fq 'define Build/Compile' "$makefile"
 grep -Fq "\$(INSTALL_BIN) ./root/usr/share/hop/hop-core" "$makefile"
 grep -Fq "\$(INSTALL_DATA) ./htdocs/luci-static/resources/view/hop/settings.js" "$makefile"
 
 if grep -Eiq 'rust-package\.mk|Build/Compile/Cargo|HOP_SOURCE_|PKG_SOURCE|USE_SOURCE_DIR' "$makefile"; then
 	echo 'LuCI package must not fetch or compile the Hop Rust core' >&2
+	exit 1
+fi
+
+if grep -Eq '^[[:space:]]*DEPENDS[+:]?=' "$makefile"; then
+	echo 'LuCI runtime dependencies must not trigger dependency compilation' >&2
 	exit 1
 fi
 
