@@ -152,10 +152,10 @@ install_core() {
 		return 1
 	}
 	candidate=$temporary_dir/hop-server
-	[ -f "$candidate" ] && [ ! -L "$candidate" ] || {
+	if [ ! -f "$candidate" ] || [ -L "$candidate" ]; then
 		log "Hop core archive does not contain a regular binary"
 		return 1
-	}
+	fi
 	chmod 0755 "$candidate"
 	version_output=$("$candidate" --version 2>/dev/null) || {
 		log "downloaded Hop core failed its version self-check"
