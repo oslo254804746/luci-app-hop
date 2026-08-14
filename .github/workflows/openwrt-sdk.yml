@@ -1,20 +1,15 @@
-name: OpenWrt SDK
+name: LuCI package
 
 on:
   push:
     branches: [dev]
   workflow_dispatch:
-    inputs:
-      hop_ref:
-        description: hop-rs branch, tag, or full commit to build
-        required: true
-        default: master
 
 permissions:
   contents: read
 
 concurrency:
-  group: openwrt-sdk-${{ github.ref }}
+  group: luci-package-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -22,43 +17,45 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - name: Install shellcheck
+      - name: Install validation tools
         run: sudo apt-get update && sudo apt-get install --yes shellcheck
-      - name: Validate package boundary
+      - name: Validate package boundary and core manager
         run: ./tests/validate-package.sh
 
-  sdk-build:
+  sdk-package:
     needs: package-structure
     runs-on: ubuntu-24.04
-    timeout-minutes: 180
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
         include:
-          - name: x86-64
+          - name: openwrt-24.10.4-ipk
+            release: 24.10.4
+            sdk_archive: openwrt-sdk-24.10.4-x86-64_gcc-13.3.0_musl.Linux-x86_64.tar.zst
+            sdk_sha256: 229e871f734a2cee5ce3ad6a3e98d3836b0899bfdeaea4d9c2c5cc7b1fce1407
+            packages_commit: f1470815f41fe199bfdafe9a91ad115bc2e91203
+            luci_commit: 75e41cba5160281b2d1dca922719efef29f7ffd8
+            extension: ipk
+          - name: openwrt-25.12.5-apk
+            release: 25.12.5
             sdk_archive: openwrt-sdk-25.12.5-x86-64_gcc-14.3.0_musl.Linux-x86_64.tar.zst
             sdk_sha256: 0c8df0151a1e88feb7c03d694d61f6a18d51872815b7c811d76e2b77504d5e9c
-          - name: armsr-armv8
-            sdk_archive: openwrt-sdk-25.12.5-armsr-armv8_gcc-14.3.0_musl.Linux-x86_64.tar.zst
-            sdk_sha256: 1b0316604a3e820b2b008a1baff3f9dac6716af942bef800930e58c7de98c98b
+            packages_commit: 5caa62e0bc9f7fb9b0c12a23267bceb7724214dd
+            luci_commit: 128a7812f4be233c5dd7f7466f534fd888785caf
+            extension: apk
     env:
-      OPENWRT_RELEASE: 25.12.5
-      OPENWRT_PACKAGES_COMMIT: 5caa62e0bc9f7fb9b0c12a23267bceb7724214dd
+      OPENWRT_RELEASE: ${{ matrix.release }}
       SDK_ARCHIVE: ${{ matrix.sdk_archive }}
       SDK_SHA256: ${{ matrix.sdk_sha256 }}
-      HOP_REF: ${{ inputs.hop_ref || 'master' }}
+      OPENWRT_PACKAGES_COMMIT: ${{ matrix.packages_commit }}
+      OPENWRT_LUCI_COMMIT: ${{ matrix.luci_commit }}
+      PACKAGE_EXTENSION: ${{ matrix.extension }}
     steps:
-      - name: Check out package repository
+      - name: Check out LuCI package
         uses: actions/checkout@v4
         with:
           path: luci-app-hop
-
-      - name: Check out Hop source
-        uses: actions/checkout@v4
-        with:
-          repository: oslo254804746/hop-rs
-          ref: ${{ env.HOP_REF }}
-          path: hop-rs
 
       - name: Install SDK host dependencies
         run: |
@@ -71,49 +68,40 @@ jobs:
         working-directory: ${{ runner.temp }}
         run: |
           set -euo pipefail
-          base_url="https://downloads.openwrt.org/releases/${OPENWRT_RELEASE}/targets"
-          case "${{ matrix.name }}" in
-            x86-64) target_path=x86/64 ;;
-            armsr-armv8) target_path=armsr/armv8 ;;
-            *) exit 2 ;;
-          esac
-          wget --quiet "${base_url}/${target_path}/${SDK_ARCHIVE}"
+          url="https://downloads.openwrt.org/releases/${OPENWRT_RELEASE}/targets/x86/64/${SDK_ARCHIVE}"
+          wget --quiet "$url"
           printf '%s  %s\n' "$SDK_SHA256" "$SDK_ARCHIVE" | sha256sum --check --strict
           tar --extract --file "$SDK_ARCHIVE"
-          sdk_dir=$(find . -maxdepth 1 -type d -name 'openwrt-sdk-*' -printf '%f\n')
-          test -n "$sdk_dir"
-          printf 'SDK_DIR=%s/%s\n' "$RUNNER_TEMP" "$sdk_dir" >> "$GITHUB_ENV"
+          mapfile -t sdk_dirs < <(find . -maxdepth 1 -type d -name 'openwrt-sdk-*' -printf '%f\n')
+          test "${#sdk_dirs[@]}" -eq 1
+          printf 'SDK_DIR=%s/%s\n' "$RUNNER_TEMP" "${sdk_dirs[0]}" >>"$GITHUB_ENV"
 
-      - name: Pin and install the OpenWrt packages feed
+      - name: Pin OpenWrt package feeds
         run: |
           set -euo pipefail
-          umask 022
           git clone --filter=blob:none --no-checkout \
             https://github.com/openwrt/packages.git "$SDK_DIR/feeds/packages"
           git -C "$SDK_DIR/feeds/packages" fetch --depth 1 origin "$OPENWRT_PACKAGES_COMMIT"
           git -C "$SDK_DIR/feeds/packages" checkout --detach FETCH_HEAD
+          git clone --filter=blob:none --no-checkout \
+            https://github.com/openwrt/luci.git "$SDK_DIR/feeds/luci"
+          git -C "$SDK_DIR/feeds/luci" fetch --depth 1 origin "$OPENWRT_LUCI_COMMIT"
+          git -C "$SDK_DIR/feeds/luci" checkout --detach FETCH_HEAD
           cd "$SDK_DIR"
-          ./scripts/feeds update -i packages
-          ./scripts/feeds install rust
+          ./scripts/feeds update -i packages luci
+          ./scripts/feeds install curl ca-bundle luci-base
 
-      - name: Configure custom Hop package
+      - name: Configure lightweight package
         run: |
           set -euo pipefail
-          umask 022
-          ln -s "$GITHUB_WORKSPACE/luci-app-hop" "$SDK_DIR/package/hop"
+          ln -s "$GITHUB_WORKSPACE/luci-app-hop" "$SDK_DIR/package/luci-app-hop"
+          printf 'CONFIG_PACKAGE_luci-app-hop=m\n' >"$SDK_DIR/.config"
           make -C "$SDK_DIR" defconfig
 
-      - name: Build Hop package
+      - name: Build architecture-independent LuCI package
         run: |
           set -euo pipefail
-          umask 022
-          hop_commit=$(git -C "$GITHUB_WORKSPACE/hop-rs" rev-parse HEAD)
-          hop_date=$(git -C "$GITHUB_WORKSPACE/hop-rs" show -s --format=%cs HEAD)
-          make -C "$SDK_DIR" package/hop/compile V=sc -j"$(nproc)" \
-            USE_SOURCE_DIR="$GITHUB_WORKSPACE/hop-rs" \
-            HOP_SOURCE_DATE="$hop_date" \
-            HOP_SOURCE_VERSION="$hop_commit" \
-            HOP_MIRROR_HASH=0000000000000000000000000000000000000000000000000000000000000000
+          make -C "$SDK_DIR" package/luci-app-hop/compile V=sc -j"$(nproc)"
 
       - name: Record package metadata
         run: |
@@ -121,19 +109,26 @@ jobs:
           artifact_dir="$GITHUB_WORKSPACE/artifacts/${{ matrix.name }}"
           mkdir -p "$artifact_dir"
           mapfile -d '' packages < <(find "$SDK_DIR/bin/packages" -type f \
-            \( -name 'hop-*.apk' -o -name 'hop_*.ipk' \) -print0)
+            -name "luci-app-hop*.${PACKAGE_EXTENSION}" -print0)
           test "${#packages[@]}" -eq 1
           cp "${packages[0]}" "$artifact_dir/"
-          sha256sum "$artifact_dir"/* | tee "$artifact_dir/SHA256SUMS"
-          file "$artifact_dir"/* | tee "$artifact_dir/FILE-TYPES"
-          stat --printf='%n %s bytes\n' "$artifact_dir"/* | tee "$artifact_dir/SIZES"
-          git -C "$GITHUB_WORKSPACE/hop-rs" rev-parse HEAD > "$artifact_dir/HOP_SOURCE_COMMIT"
-          git -C "$SDK_DIR/feeds/packages" rev-parse HEAD > "$artifact_dir/OPENWRT_PACKAGES_COMMIT"
+          package_name=$(basename "${packages[0]}")
+          if [ "$PACKAGE_EXTENSION" = ipk ]; then
+            case "$package_name" in
+              *_all.ipk) ;;
+              *) echo "IPK is not architecture-independent: $package_name" >&2; exit 1 ;;
+            esac
+          fi
+          (cd "$artifact_dir" && sha256sum "$package_name" >SHA256SUMS)
+          file "$artifact_dir/$package_name" >"$artifact_dir/FILE-TYPE"
+          stat --printf='%n %s bytes\n' "$artifact_dir/$package_name" >"$artifact_dir/SIZE"
+          git -C "$SDK_DIR/feeds/packages" rev-parse HEAD >"$artifact_dir/OPENWRT_PACKAGES_COMMIT"
+          git -C "$SDK_DIR/feeds/luci" rev-parse HEAD >"$artifact_dir/OPENWRT_LUCI_COMMIT"
 
       - name: Upload validation package
         uses: actions/upload-artifact@v4
         with:
-          name: hop-${{ matrix.name }}-openwrt-${{ env.OPENWRT_RELEASE }}
+          name: luci-app-hop-${{ matrix.name }}
           path: artifacts/${{ matrix.name }}
           if-no-files-found: error
           retention-days: 14

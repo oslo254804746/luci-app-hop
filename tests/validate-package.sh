@@ -2,26 +2,70 @@
 set -euo pipefail
 
 repo_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+makefile=$repo_dir/Makefile
+manager=$repo_dir/root/usr/share/hop/hop-core
+init_script=$repo_dir/root/etc/init.d/hop
+uci_config=$repo_dir/root/etc/config/hop
+startup_config=$repo_dir/root/etc/hop/config.toml
+luci_view=$repo_dir/htdocs/luci-static/resources/view/hop/settings.js
+menu_json=$repo_dir/root/usr/share/luci/menu.d/luci-app-hop.json
+acl_json=$repo_dir/root/usr/share/rpcd/acl.d/luci-app-hop.json
 
-test -f "$repo_dir/Makefile"
-test -x "$repo_dir/files/hop.init"
-test -f "$repo_dir/files/hop.uci"
-test -f "$repo_dir/files/hop.toml"
+required_files=(
+	"$makefile"
+	"$manager"
+	"$init_script"
+	"$uci_config"
+	"$startup_config"
+	"$luci_view"
+	"$menu_json"
+	"$acl_json"
+)
+for path in "${required_files[@]}"; do
+	test -f "$path"
+done
+test -x "$manager"
+test -x "$init_script"
+test -x "$repo_dir/tests/test-core-manager.sh"
 
-shellcheck -s sh "$repo_dir/files/hop.init"
+shellcheck -s sh "$manager" "$init_script"
+shellcheck "$repo_dir"/tests/*.sh
+bash -n "$repo_dir"/tests/*.sh
 
-grep -Fq '$(RUST_ARCH_DEPENDS)' "$repo_dir/Makefile"
-grep -Fq 'Build/Compile/Cargo,crates/hop-server' "$repo_dir/Makefile"
-grep -Fq 'HOP_SOURCE_VERSION' "$repo_dir/Makefile"
-grep -Fq 'HOP_MIRROR_HASH' "$repo_dir/Makefile"
-grep -Fq 'api.enabled' "$repo_dir/README.md"
+if command -v node >/dev/null 2>&1; then
+	node --check "$luci_view"
+fi
+python3 -m json.tool "$menu_json" >/dev/null
+python3 -m json.tool "$acl_json" >/dev/null
 
-if grep -Eiq 'node(js)?|docker|luci-base' "$repo_dir/Makefile"; then
-	echo "hop core package must not depend on LuCI, Node.js, or Docker" >&2
+grep -Fq 'PKG_NAME:=luci-app-hop' "$makefile"
+grep -Fq 'PKGARCH:=all' "$makefile"
+grep -Fq 'DEPENDS:=+luci-base +curl +ca-bundle' "$makefile"
+grep -Fq 'define Build/Compile' "$makefile"
+grep -Fq "\$(INSTALL_BIN) ./root/usr/share/hop/hop-core" "$makefile"
+grep -Fq "\$(INSTALL_DATA) ./htdocs/luci-static/resources/view/hop/settings.js" "$makefile"
+
+if grep -Eiq 'rust-package\.mk|Build/Compile/Cargo|HOP_SOURCE_|PKG_SOURCE|USE_SOURCE_DIR' "$makefile"; then
+	echo 'LuCI package must not fetch or compile the Hop Rust core' >&2
 	exit 1
 fi
 
-grep -Fq "option enabled '0'" "$repo_dir/files/hop.uci"
-grep -Fq 'enabled = false' "$repo_dir/files/hop.toml"
+if find "$repo_dir" -path "$repo_dir/.git" -prune -o -type f \
+	\( -name hop-server -o -name '*.ipk' -o -name '*.apk' -o -name '*.tar.gz' \) \
+	-print -quit | grep -q .; then
+	echo 'LuCI package source must not embed core or package binaries' >&2
+	exit 1
+fi
 
-echo "OpenWrt hop package structure is valid"
+grep -Fq "hop-server-linux-\${arch}-musl.tar.gz" "$manager"
+grep -Fq 'SHA256SUMS' "$manager"
+grep -Fq 'sha256sum' "$manager"
+grep -Fq 'x86_64 | amd64' "$manager"
+grep -Fq 'aarch64 | arm64' "$manager"
+grep -Fq "option enabled '0'" "$uci_config"
+grep -Fq "option auto_download '1'" "$uci_config"
+grep -Fq 'enabled = false' "$startup_config"
+
+"$repo_dir/tests/test-core-manager.sh"
+
+echo 'OpenWrt LuCI package structure is valid'

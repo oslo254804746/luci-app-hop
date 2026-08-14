@@ -1,58 +1,63 @@
 include $(TOPDIR)/rules.mk
 
-PKG_NAME:=hop
+PKG_NAME:=luci-app-hop
 PKG_VERSION:=0.2.0
 PKG_RELEASE:=1
-
-PKG_SOURCE_PROTO:=git
-PKG_SOURCE_URL:=https://github.com/oslo254804746/hop-rs.git
-PKG_SOURCE_DATE:=$(HOP_SOURCE_DATE)
-PKG_SOURCE_VERSION:=$(HOP_SOURCE_VERSION)
-PKG_MIRROR_HASH:=$(HOP_MIRROR_HASH)
+PKGARCH:=all
 
 PKG_MAINTAINER:=Hop maintainers
 PKG_LICENSE:=MIT
 PKG_LICENSE_FILES:=LICENSE
-PKG_BUILD_DEPENDS:=rust/host
-PKG_BUILD_PARALLEL:=1
 
 include $(INCLUDE_DIR)/package.mk
-include $(TOPDIR)/feeds/packages/lang/rust/rust-package.mk
 
-define Package/hop
-  SECTION:=net
-  CATEGORY:=Network
-  SUBMENU:=SSH
-  TITLE:=Small, complete SSH jump server
-  URL:=https://github.com/oslo254804746/hop-rs
-  DEPENDS:=$(RUST_ARCH_DEPENDS) +libgcc +libpthread
+define Package/luci-app-hop
+  SECTION:=luci
+  CATEGORY:=LuCI
+  SUBMENU:=3. Applications
+  TITLE:=LuCI support for Hop
+  URL:=https://github.com/oslo254804746/luci-app-hop
+  DEPENDS:=+luci-base +curl +ca-bundle
   USERID:=hop=514:hop=514
 endef
 
-define Package/hop/description
- Hop is a single-binary SSH jump server with a SQLite resource catalog,
- native SSH/SFTP/ProxyJump support, and optional loopback Control API.
+define Package/luci-app-hop/description
+ Lightweight LuCI and procd integration for Hop. The architecture-specific
+ Hop core is downloaded separately from verified GitHub Release assets.
 endef
 
-define Package/hop/conffiles
+define Build/Prepare
+endef
+
+define Build/Configure
+endef
+
+define Build/Compile
+endef
+
+define Package/luci-app-hop/conffiles
 /etc/config/hop
 /etc/hop/config.toml
 endef
 
-define Build/Compile
-	$(call Build/Compile/Cargo,crates/hop-server)
-endef
-
-define Package/hop/install
-	$(INSTALL_DIR) $(1)/usr/bin
-	$(INSTALL_BIN) $(PKG_INSTALL_DIR)/bin/hop-server $(1)/usr/bin/hop-server
-	$(INSTALL_DIR) $(1)/etc/init.d
-	$(INSTALL_BIN) ./files/hop.init $(1)/etc/init.d/hop
+define Package/luci-app-hop/install
 	$(INSTALL_DIR) $(1)/etc/config
-	$(INSTALL_CONF) ./files/hop.uci $(1)/etc/config/hop
+	$(INSTALL_CONF) ./root/etc/config/hop $(1)/etc/config/hop
 	$(INSTALL_DIR) $(1)/etc/hop
-	$(INSTALL_CONF) ./files/hop.toml $(1)/etc/hop/config.toml
-	$(INSTALL_DIR) $(1)/var/lib/hop
+	$(INSTALL_CONF) ./root/etc/hop/config.toml $(1)/etc/hop/config.toml
+	$(INSTALL_DIR) $(1)/etc/init.d
+	$(INSTALL_BIN) ./root/etc/init.d/hop $(1)/etc/init.d/hop
+	$(INSTALL_DIR) $(1)/usr/share/hop
+	$(INSTALL_BIN) ./root/usr/share/hop/hop-core $(1)/usr/share/hop/hop-core
+	$(INSTALL_DIR) $(1)/usr/share/luci/menu.d
+	$(INSTALL_DATA) ./root/usr/share/luci/menu.d/luci-app-hop.json \
+		$(1)/usr/share/luci/menu.d/luci-app-hop.json
+	$(INSTALL_DIR) $(1)/usr/share/rpcd/acl.d
+	$(INSTALL_DATA) ./root/usr/share/rpcd/acl.d/luci-app-hop.json \
+		$(1)/usr/share/rpcd/acl.d/luci-app-hop.json
+	$(INSTALL_DIR) $(1)/www/luci-static/resources/view/hop
+	$(INSTALL_DATA) ./htdocs/luci-static/resources/view/hop/settings.js \
+		$(1)/www/luci-static/resources/view/hop/settings.js
 endef
 
-$(eval $(call BuildPackage,hop))
+$(eval $(call BuildPackage,luci-app-hop))

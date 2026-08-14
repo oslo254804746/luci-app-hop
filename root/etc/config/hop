@@ -1,0 +1,8 @@
+config hop 'main'
+	option enabled '0'
+	option config_path '/etc/hop/config.toml'
+	option auto_download '1'
+	option core_version 'latest'
+	option release_base 'https://github.com/oslo254804746/hop-rs/releases'
+	option log_stdout '1'
+	option log_stderr '1'

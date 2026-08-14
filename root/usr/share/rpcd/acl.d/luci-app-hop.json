@@ -1,0 +1,15 @@
+{
+	"luci-app-hop": {
+		"description": "Grant access to the Hop service and core manager",
+		"read": {
+			"file": {
+				"/etc/init.d/hop": [ "exec" ],
+				"/usr/share/hop/hop-core": [ "exec" ]
+			},
+			"uci": [ "hop" ]
+		},
+		"write": {
+			"uci": [ "hop" ]
+		}
+	}
+}

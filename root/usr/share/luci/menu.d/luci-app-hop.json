@@ -1,0 +1,14 @@
+{
+	"admin/services/hop": {
+		"title": "Hop",
+		"order": 80,
+		"action": {
+			"type": "view",
+			"path": "hop/settings"
+		},
+		"depends": {
+			"acl": [ "luci-app-hop" ],
+			"uci": { "hop": true }
+		}
+	}
+}

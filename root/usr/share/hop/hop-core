@@ -1,0 +1,219 @@
+#!/bin/sh
+# shellcheck disable=SC3043
+set -eu
+
+DEFAULT_RELEASE_BASE=https://github.com/oslo254804746/hop-rs/releases
+
+core_dir=${HOP_CORE_DIR:-/etc/hop/core}
+core_path=$core_dir/hop-server
+release_marker=$core_dir/release
+lock_dir=${HOP_LOCK_DIR:-/tmp/lock/hop-core.lock}
+core_version=${HOP_CORE_VERSION:-}
+release_base=${HOP_RELEASE_BASE:-}
+requested_arch=${HOP_ARCH:-}
+temporary_dir=
+lock_held=0
+
+log() {
+	logger -t hop-core "$*" 2>/dev/null || true
+	printf '%s\n' "$*" >&2
+}
+
+load_settings() {
+	local configured_base configured_version
+
+	if [ -r /lib/functions.sh ]; then
+		# shellcheck source=/dev/null
+		. /lib/functions.sh
+		config_load hop
+		config_get configured_version main core_version latest
+		config_get configured_base main release_base "$DEFAULT_RELEASE_BASE"
+	else
+		configured_version=latest
+		configured_base=$DEFAULT_RELEASE_BASE
+	fi
+	[ -n "$core_version" ] || core_version=$configured_version
+	[ -n "$release_base" ] || release_base=$configured_base
+	release_base=${release_base%/}
+}
+
+detect_arch() {
+	local machine
+
+	machine=${requested_arch:-$(uname -m)}
+	case "$machine" in
+		x86_64 | amd64) printf '%s\n' x86_64 ;;
+		aarch64 | arm64) printf '%s\n' aarch64 ;;
+		*)
+			log "unsupported Hop core architecture: $machine"
+			return 1
+			;;
+	esac
+}
+
+release_download_base() {
+	case "$core_version" in
+		latest) printf '%s/latest/download\n' "$release_base" ;;
+		v*) printf '%s/download/%s\n' "$release_base" "$core_version" ;;
+		*) printf '%s/download/v%s\n' "$release_base" "$core_version" ;;
+	esac
+}
+
+cleanup() {
+	if [ -n "$temporary_dir" ] && [ -d "$temporary_dir" ]; then
+		rm -rf "$temporary_dir"
+	fi
+	if [ "$lock_held" -eq 1 ]; then
+		rm -f "$lock_dir/pid"
+		rmdir "$lock_dir" 2>/dev/null || true
+	fi
+}
+
+acquire_lock() {
+	local lock_parent old_pid
+
+	lock_parent=${lock_dir%/*}
+	[ "$lock_parent" = "$lock_dir" ] && lock_parent=.
+	mkdir -p "$lock_parent"
+	if ! mkdir "$lock_dir" 2>/dev/null; then
+		old_pid=$(cat "$lock_dir/pid" 2>/dev/null || true)
+		if [ -n "$old_pid" ] && kill -0 "$old_pid" 2>/dev/null; then
+			log "another Hop core download is already running"
+			return 1
+		fi
+		rm -f "$lock_dir/pid"
+		rmdir "$lock_dir" 2>/dev/null || true
+		mkdir "$lock_dir" 2>/dev/null || {
+			log "unable to acquire Hop core download lock"
+			return 1
+		}
+	fi
+	printf '%s\n' "$$" >"$lock_dir/pid"
+	lock_held=1
+}
+
+download() {
+	local destination url
+
+	url=$1
+	destination=$2
+	curl --fail --location --silent --show-error --connect-timeout 20 --retry 2 \
+		--output "$destination" "$url"
+}
+
+core_is_usable() {
+	[ -x "$core_path" ] && "$core_path" --version >/dev/null 2>&1
+}
+
+install_core() {
+	local actual arch archive asset base candidate expected sums version_output
+
+	load_settings
+	arch=$(detect_arch) || return 1
+	asset=hop-server-linux-${arch}-musl.tar.gz
+	base=$(release_download_base)
+	acquire_lock || return 1
+	temporary_dir=$(mktemp -d /tmp/hop-core.XXXXXX)
+	archive=$temporary_dir/$asset
+	sums=$temporary_dir/SHA256SUMS
+
+	log "downloading Hop core $core_version for $arch"
+	download "$base/SHA256SUMS" "$sums" || {
+		log "failed to download Hop core checksums"
+		return 1
+	}
+	download "$base/$asset" "$archive" || {
+		log "failed to download Hop core asset $asset"
+		return 1
+	}
+
+	expected=$(awk -v asset="$asset" '
+		{ name = $2; sub(/^\\*/, "", name) }
+		name == asset { print $1; exit }
+	' "$sums")
+	[ "${#expected}" -eq 64 ] || {
+		log "checksum entry for $asset is missing"
+		return 1
+	}
+	case "$expected" in
+		*[!0-9a-fA-F]*)
+			log "checksum entry for $asset is invalid"
+			return 1
+			;;
+	esac
+	actual=$(sha256sum "$archive" | awk '{ print $1 }')
+	[ "$actual" = "$expected" ] || {
+		log "checksum verification failed for $asset"
+		return 1
+	}
+
+	tar -xzf "$archive" -C "$temporary_dir" hop-server || {
+		log "Hop core archive is invalid"
+		return 1
+	}
+	candidate=$temporary_dir/hop-server
+	[ -f "$candidate" ] && [ ! -L "$candidate" ] || {
+		log "Hop core archive does not contain a regular binary"
+		return 1
+	}
+	chmod 0755 "$candidate"
+	version_output=$("$candidate" --version 2>/dev/null) || {
+		log "downloaded Hop core failed its version self-check"
+		return 1
+	}
+	case "$version_output" in
+		hop-server\ *) ;;
+		*)
+			log "downloaded file is not a Hop core binary"
+			return 1
+			;;
+	esac
+
+	mkdir -p "$core_dir"
+	cp "$candidate" "$core_path.new.$$"
+	chmod 0755 "$core_path.new.$$"
+	printf '%s\n' "$core_version" >"$release_marker.new.$$"
+	mv -f "$core_path.new.$$" "$core_path"
+	mv -f "$release_marker.new.$$" "$release_marker"
+	log "installed $version_output"
+}
+
+ensure_core() {
+	local installed_release
+
+	load_settings
+	installed_release=$(cat "$release_marker" 2>/dev/null || true)
+	if core_is_usable && { [ "$core_version" = latest ] || [ "$installed_release" = "$core_version" ]; }; then
+		return 0
+	fi
+	install_core
+}
+
+show_status() {
+	local arch installed_release version_output
+
+	load_settings
+	arch=$(detect_arch) || return 1
+	installed_release=$(cat "$release_marker" 2>/dev/null || printf '%s' none)
+	if core_is_usable; then
+		version_output=$("$core_path" --version 2>/dev/null)
+		printf 'installed\tyes\narch\t%s\nversion\t%s\nrelease\t%s\npath\t%s\n' \
+			"$arch" "$version_output" "$installed_release" "$core_path"
+	else
+		printf 'installed\tno\narch\t%s\nrelease\t%s\npath\t%s\n' \
+			"$arch" "$core_version" "$core_path"
+	fi
+}
+
+trap cleanup EXIT HUP INT TERM
+
+case "${1:-status}" in
+	arch) detect_arch ;;
+	ensure) ensure_core ;;
+	install | update) install_core ;;
+	status) show_status ;;
+	*)
+		printf 'usage: %s {status|arch|ensure|install|update}\n' "$0" >&2
+		exit 2
+		;;
+esac
