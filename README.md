@@ -1,5 +1,7 @@
 # LuCI support for Hop
 
+[简体中文配置指南](docs/configuration.zh-CN.md)
+
 [![LuCI package](https://github.com/oslo254804746/luci-app-hop/actions/workflows/openwrt-sdk.yml/badge.svg?branch=dev)](https://github.com/oslo254804746/luci-app-hop/actions/workflows/openwrt-sdk.yml?query=branch%3Adev)
 
 This repository contains the lightweight OpenWrt control package for Hop. It
@@ -75,6 +77,10 @@ optional local Control API. The shipped `/etc/hop/config.toml` keeps
 The daemon runs as the unprivileged `hop` user. The downloader alone runs as
 root because it owns `/etc/hop/core`; it accepts only the named release asset,
 verifies SHA-256 before extraction, and never reads or edits the Catalog.
+
+The [Chinese configuration guide](docs/configuration.zh-CN.md) documents every
+LuCI/UCI option, the shipped Hop startup file, first-run SSH and TCP assets,
+resource watching, core updates, firewall scope, and backup.
 
 ## Cloud validation
 
