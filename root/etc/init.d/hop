@@ -20,13 +20,11 @@ start_service() {
 	config_get_bool stdout main log_stdout 1
 	config_get_bool stderr main log_stderr 1
 
-	if [ ! -x "$CORE" ]; then
-		if [ "$auto_download" -ne 1 ]; then
-			logger -t hop "Hop core is not installed; run '$CORE_MANAGER install'"
-			return 1
-		fi
-		logger -t hop "Hop core is not installed; downloading the verified release asset"
+	if [ "$auto_download" -eq 1 ]; then
 		"$CORE_MANAGER" ensure || return 1
+	elif [ ! -x "$CORE" ] || ! "$CORE" --version >/dev/null 2>&1; then
+		logger -t hop "Hop core is missing or unusable; run '$CORE_MANAGER install'"
+		return 1
 	fi
 
 	mkdir -p /var/lib/hop /tmp/hop

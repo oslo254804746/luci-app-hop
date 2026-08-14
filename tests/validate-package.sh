@@ -70,6 +70,8 @@ grep -Fq 'aarch64 | arm64' "$manager"
 grep -Fq "option enabled '0'" "$uci_config"
 grep -Fq "option auto_download '1'" "$uci_config"
 grep -Fq 'enabled = false' "$startup_config"
+grep -Fq "\"\$CORE_MANAGER\" ensure" "$init_script"
+grep -Fq "\"\$CORE\" --version" "$init_script"
 
 "$repo_dir/tests/test-core-manager.sh"
 

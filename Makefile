@@ -3,8 +3,6 @@ include $(TOPDIR)/rules.mk
 PKG_NAME:=luci-app-hop
 PKG_VERSION:=0.2.0
 PKG_RELEASE:=1
-PKGARCH:=all
-
 PKG_MAINTAINER:=Hop maintainers
 PKG_LICENSE:=MIT
 PKG_LICENSE_FILES:=LICENSE
@@ -17,6 +15,7 @@ define Package/luci-app-hop
   SUBMENU:=3. Applications
   TITLE:=LuCI support for Hop
   URL:=https://github.com/oslo254804746/luci-app-hop
+  PKGARCH:=all
   EXTRA_DEPENDS:=luci-base (>=0), curl (>=0), ca-bundle (>=0)
   USERID:=hop=514:hop=514
 endef
