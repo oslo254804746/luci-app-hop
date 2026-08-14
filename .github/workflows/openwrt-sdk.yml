@@ -16,7 +16,7 @@ jobs:
   package-structure:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Install validation tools
         run: sudo apt-get update && sudo apt-get install --yes shellcheck
       - name: Validate package boundary and core manager
@@ -53,7 +53,7 @@ jobs:
       PACKAGE_EXTENSION: ${{ matrix.extension }}
     steps:
       - name: Check out LuCI package
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           path: luci-app-hop
 
@@ -89,7 +89,8 @@ jobs:
           git -C "$SDK_DIR/feeds/luci" checkout --detach FETCH_HEAD
           cd "$SDK_DIR"
           ./scripts/feeds update -i packages luci
-          ./scripts/feeds install curl ca-bundle luci-base
+          ./scripts/feeds install -a -p packages
+          ./scripts/feeds install -a -p luci
 
       - name: Configure lightweight package
         run: |
