@@ -1,0 +1,139 @@
+name: OpenWrt SDK
+
+on:
+  push:
+    branches: [dev]
+  workflow_dispatch:
+    inputs:
+      hop_ref:
+        description: hop-rs branch, tag, or full commit to build
+        required: true
+        default: main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: openwrt-sdk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package-structure:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install --yes shellcheck
+      - name: Validate package boundary
+        run: ./tests/validate-package.sh
+
+  sdk-build:
+    needs: package-structure
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: x86-64
+            sdk_archive: openwrt-sdk-25.12.5-x86-64_gcc-14.3.0_musl.Linux-x86_64.tar.zst
+            sdk_sha256: 0c8df0151a1e88feb7c03d694d61f6a18d51872815b7c811d76e2b77504d5e9c
+          - name: armsr-armv8
+            sdk_archive: openwrt-sdk-25.12.5-armsr-armv8_gcc-14.3.0_musl.Linux-x86_64.tar.zst
+            sdk_sha256: 1b0316604a3e820b2b008a1baff3f9dac6716af942bef800930e58c7de98c98b
+    env:
+      OPENWRT_RELEASE: 25.12.5
+      OPENWRT_PACKAGES_COMMIT: 5caa62e0bc9f7fb9b0c12a23267bceb7724214dd
+      SDK_ARCHIVE: ${{ matrix.sdk_archive }}
+      SDK_SHA256: ${{ matrix.sdk_sha256 }}
+      HOP_REF: ${{ inputs.hop_ref || 'main' }}
+    steps:
+      - name: Check out package repository
+        uses: actions/checkout@v4
+        with:
+          path: luci-app-hop
+
+      - name: Check out Hop source
+        uses: actions/checkout@v4
+        with:
+          repository: oslo254804746/hop-rs
+          ref: ${{ env.HOP_REF }}
+          path: hop-rs
+
+      - name: Install SDK host dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes \
+            build-essential clang flex bison gawk gettext git libncurses-dev \
+            libssl-dev python3-setuptools rsync unzip zlib1g-dev file wget zstd
+
+      - name: Download and verify official SDK
+        working-directory: ${{ runner.temp }}
+        run: |
+          set -euo pipefail
+          base_url="https://downloads.openwrt.org/releases/${OPENWRT_RELEASE}/targets"
+          case "${{ matrix.name }}" in
+            x86-64) target_path=x86/64 ;;
+            armsr-armv8) target_path=armsr/armv8 ;;
+            *) exit 2 ;;
+          esac
+          wget --quiet "${base_url}/${target_path}/${SDK_ARCHIVE}"
+          printf '%s  %s\n' "$SDK_SHA256" "$SDK_ARCHIVE" | sha256sum --check --strict
+          tar --extract --file "$SDK_ARCHIVE"
+          sdk_dir=$(find . -maxdepth 1 -type d -name 'openwrt-sdk-*' -printf '%f\n')
+          test -n "$sdk_dir"
+          printf 'SDK_DIR=%s/%s\n' "$RUNNER_TEMP" "$sdk_dir" >> "$GITHUB_ENV"
+
+      - name: Pin and install the OpenWrt packages feed
+        run: |
+          set -euo pipefail
+          umask 022
+          git clone --filter=blob:none --no-checkout \
+            https://github.com/openwrt/packages.git "$SDK_DIR/feeds/packages"
+          git -C "$SDK_DIR/feeds/packages" fetch --depth 1 origin "$OPENWRT_PACKAGES_COMMIT"
+          git -C "$SDK_DIR/feeds/packages" checkout --detach FETCH_HEAD
+          cd "$SDK_DIR"
+          ./scripts/feeds update -i packages
+          ./scripts/feeds install rust
+
+      - name: Configure custom Hop package
+        run: |
+          set -euo pipefail
+          umask 022
+          ln -s "$GITHUB_WORKSPACE/luci-app-hop" "$SDK_DIR/package/hop"
+          make -C "$SDK_DIR" defconfig
+
+      - name: Build Hop package
+        run: |
+          set -euo pipefail
+          umask 022
+          hop_commit=$(git -C "$GITHUB_WORKSPACE/hop-rs" rev-parse HEAD)
+          hop_date=$(git -C "$GITHUB_WORKSPACE/hop-rs" show -s --format=%cs HEAD)
+          make -C "$SDK_DIR" package/hop/compile V=sc -j"$(nproc)" \
+            USE_SOURCE_DIR="$GITHUB_WORKSPACE/hop-rs" \
+            HOP_SOURCE_DATE="$hop_date" \
+            HOP_SOURCE_VERSION="$hop_commit" \
+            HOP_MIRROR_HASH=0000000000000000000000000000000000000000000000000000000000000000
+
+      - name: Record package metadata
+        run: |
+          set -euo pipefail
+          artifact_dir="$GITHUB_WORKSPACE/artifacts/${{ matrix.name }}"
+          mkdir -p "$artifact_dir"
+          mapfile -d '' packages < <(find "$SDK_DIR/bin/packages" -type f \
+            \( -name 'hop-*.apk' -o -name 'hop_*.ipk' \) -print0)
+          test "${#packages[@]}" -eq 1
+          cp "${packages[0]}" "$artifact_dir/"
+          sha256sum "$artifact_dir"/* | tee "$artifact_dir/SHA256SUMS"
+          file "$artifact_dir"/* | tee "$artifact_dir/FILE-TYPES"
+          stat --printf='%n %s bytes\n' "$artifact_dir"/* | tee "$artifact_dir/SIZES"
+          git -C "$GITHUB_WORKSPACE/hop-rs" rev-parse HEAD > "$artifact_dir/HOP_SOURCE_COMMIT"
+          git -C "$SDK_DIR/feeds/packages" rev-parse HEAD > "$artifact_dir/OPENWRT_PACKAGES_COMMIT"
+
+      - name: Upload validation package
+        uses: actions/upload-artifact@v4
+        with:
+          name: hop-${{ matrix.name }}-openwrt-${{ env.OPENWRT_RELEASE }}
+          path: artifacts/${{ matrix.name }}
+          if-no-files-found: error
+          retention-days: 14

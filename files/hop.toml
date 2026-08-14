@@ -1,0 +1,30 @@
+[server]
+ssh_listen = "0.0.0.0:2222"
+
+[database]
+path = "/var/lib/hop/hop.db"
+
+[api]
+enabled = false
+listen = "127.0.0.1:8083"
+token_file = "/var/lib/hop/api.token"
+cors_allowlist = []
+
+[ssh]
+host_key_file = "/var/lib/hop/host_key"
+host_key_type = "ed25519"
+banner = "Welcome to Hop"
+keepalive_interval = 30
+connect_timeout = 10
+proxy_policy = "assets_only"
+
+[security]
+master_key_file = "/var/lib/hop/master.key"
+
+[inventory]
+sources = []
+
+[runtime]
+temp_dir = "/tmp/hop"
+log_level = "info"
+session_retention_days = 30
