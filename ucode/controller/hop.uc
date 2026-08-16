@@ -57,7 +57,7 @@ function api_suffix() {
 
 function allowed_request(method, path) {
 	if (method == 'GET') {
-		return !!match(path, /^\/(status|assets|credentials|access-keys|sessions)$/) ||
+		return !!match(path, /^\/(status|assets|credentials|access-keys|sessions|known-hosts)$/) ||
 			path == '/catalog/revision';
 	}
 
@@ -73,7 +73,8 @@ function allowed_request(method, path) {
 	}
 
 	if (method == 'DELETE')
-		return !!match(path, /^\/(assets|credentials|access-keys)\/[^/]+$/);
+		return path == '/known-hosts' ||
+			!!match(path, /^\/(assets|credentials|access-keys)\/[^/]+$/);
 
 	return false;
 }
@@ -246,7 +247,7 @@ function proxy_request(method, path, authorization, body) {
 		'Host: 127.0.0.1:8083',
 		'Accept: application/json',
 		`Authorization: ${authorization}`,
-		'User-Agent: luci-app-hop/0.2.3',
+		'User-Agent: luci-app-hop/0.2.4',
 		'Connection: close'
 	];
 
@@ -347,7 +348,7 @@ return {
 			return;
 		}
 
-		let body = (method == 'POST' || method == 'PUT') ? http.content() : null;
+		let body = (method == 'POST' || method == 'PUT' || method == 'DELETE') ? http.content() : null;
 		if (body != null && length(body) > MAX_REQUEST_BODY) {
 			json_error(413, 'Content Too Large', 'request_too_large', 'The Hop API request body is too large');
 			return;

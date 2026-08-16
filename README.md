@@ -34,7 +34,7 @@ SHA256SUMS
 Each archive contains one executable named `hop-server`. The two supported
 router machine families are `x86_64`/`amd64` and `aarch64`/`arm64`.
 
-The default `core_version` is pinned to `v0.2.3` to match the bundled panel. It
+The default `core_version` is pinned to `v0.2.4` to match the bundled panel. It
 can be changed to `latest` or another version in LuCI or UCI. `release_base`
 defaults to the official Hop GitHub Releases URL; the LuCI combobox also offers
 `gh-proxy.net` and accepts a custom HTTPS GitHub-compatible mirror.
