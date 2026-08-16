@@ -3,12 +3,45 @@
 		"title": "Hop",
 		"order": 80,
 		"action": {
+			"type": "firstchild"
+		},
+		"depends": {
+			"acl": [ "luci-app-hop" ],
+			"uci": { "hop": true }
+		}
+	},
+	"admin/services/hop/panel": {
+		"title": "Management Panel",
+		"order": 10,
+		"action": {
+			"type": "function",
+			"module": "luci.controller.hop",
+			"function": "action_panel"
+		},
+		"depends": {
+			"acl": [ "luci-app-hop" ]
+		}
+	},
+	"admin/services/hop/settings": {
+		"title": "Service Settings",
+		"order": 20,
+		"action": {
 			"type": "view",
 			"path": "hop/settings"
 		},
 		"depends": {
 			"acl": [ "luci-app-hop" ],
 			"uci": { "hop": true }
+		}
+	},
+	"admin/services/hop/api/v1/*": {
+		"action": {
+			"type": "function",
+			"module": "luci.controller.hop",
+			"function": "action_api"
+		},
+		"depends": {
+			"acl": [ "luci-app-hop" ]
 		}
 	}
 }

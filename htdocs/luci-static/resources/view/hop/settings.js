@@ -14,9 +14,11 @@ return view.extend({
 	render: function(data) {
 		var m, o, s;
 		var coreStatus = (data.stdout || data.stderr || '').trim();
+		var officialReleaseBase = 'https://github.com/oslo254804746/hop-rs/releases';
+		var ghProxyReleaseBase = 'https://gh-proxy.net/' + officialReleaseBase;
 
 		m = new form.Map('hop', _('Hop'),
-			_('LuCI controls only the service shell and verified core download. Assets, credentials and Access Keys remain in the Hop Catalog.'));
+			_('This page controls the service and verified core download. Use the Management Panel tab for assets, credentials, Access Keys and sessions.'));
 
 		s = m.section(form.TypedSection, 'hop', _('Service'));
 		s.anonymous = true;
@@ -34,13 +36,21 @@ return view.extend({
 		o.rmempty = false;
 
 		o = s.option(form.Value, 'core_version', _('Core release'));
-		o.default = 'latest';
+		o.default = 'v0.2.3';
 		o.rmempty = false;
-		o.description = _('Use latest, a tag such as v0.2.0, or a version such as 0.2.0.');
+		o.description = _('Use latest, a tag such as v0.2.3, or a version such as 0.2.3. Keeping the bundled version avoids frontend/API mismatches.');
 
-		o = s.option(form.Value, 'release_base', _('Release base URL'));
-		o.default = 'https://github.com/oslo254804746/hop-rs/releases';
+		o = s.option(form.Value, 'release_base', _('Core download source'));
+		o.default = officialReleaseBase;
 		o.rmempty = false;
+		o.value(officialReleaseBase, _('Official GitHub Releases'));
+		o.value(ghProxyReleaseBase, _('gh-proxy.net mirror (third party)'));
+		o.description = _('Choose a preset or enter a custom GitHub-compatible Releases base URL. Third-party mirrors can replace both the archive and its checksum; use only a provider you trust.');
+		o.validate = function(sectionId, value) {
+			if (!/^https:\/\/[^\s?#]+$/.test(value))
+				return _('Use an HTTPS URL without a query string or fragment.');
+			return true;
+		};
 
 		o = s.option(form.Flag, 'log_stdout', _('Log standard output'));
 		o.default = '1';

@@ -1,19 +1,26 @@
 # luci-app-hop 配置指南
 
-`luci-app-hop` 管理 OpenWrt 上的服务外壳和 Hop 核心下载。它不在 UCI 中保存资产、凭据或 Access Key。
+`luci-app-hop` 在 OpenWrt 上提供两部分能力：
 
-安装后会出现两组配置：
+- 原生 LuCI 服务页负责启停 Hop、选择核心版本和下载源；
+- 内置 Vue 管理面板负责资产、目标凭据、入口公钥和会话。
 
-| 文件 | 用途 |
+Hop 核心仍然是按 CPU 架构单独下载的静态程序，不会编译进 LuCI 包。
+
+## 文件与端口
+
+| 路径或端口 | 用途 |
 |---|---|
-| `/etc/config/hop` | UCI 服务设置，包括启用状态和核心版本 |
-| `/etc/hop/config.toml` | Hop 启动配置，包括 SSH 监听、SQLite 路径和资源来源 |
+| `/etc/config/hop` | UCI 服务、版本和下载源设置 |
+| `/etc/hop/config.toml` | Hop 0.2.3 启动配置和网页管理 Token |
+| `/etc/hop/core/hop-server` | 下载并校验后的核心程序 |
+| `/var/lib/hop` | SQLite、加密主密钥和 SSH Host Key |
+| `0.0.0.0:2222` | 默认入口 SSH 监听 |
+| `127.0.0.1:8083` | 仅供 LuCI 代理访问的 Control API |
 
-Hop 的运行数据保存在 `/var/lib/hop`，核心二进制安装在 `/etc/hop/core/hop-server`。
+Control API 不监听 LAN 地址。浏览器只访问当前 LuCI Origin 下的受认证代理路径。
 
 ## 安装和首次启动
-
-安装构建好的 IPK 或 APK：
 
 ```sh
 # OpenWrt 24.10
@@ -23,7 +30,7 @@ opkg install luci-app-hop_*.ipk
 apk add --allow-untrusted luci-app-hop-*.apk
 ```
 
-安装后可以在 LuCI 的 `Services -> Hop` 中配置服务。命令行启用方式：
+然后进入 **Services → Hop → Service Settings**，启用服务并保存，或者执行：
 
 ```sh
 uci set hop.main.enabled='1'
@@ -32,28 +39,29 @@ uci commit hop
 /etc/init.d/hop start
 ```
 
-默认 `auto_download` 为 `1`。第一次启用时，如果本地没有可用核心，启动脚本会下载当前架构对应的 Release 文件、校验 `SHA256SUMS`，然后执行 `hop-server --version`。校验通过后才会替换现有核心。
+首次启动会下载与 `uname -m` 匹配的 `x86_64` 或 `aarch64` musl 核心，校验 Release 中的 `SHA256SUMS`，执行 `hop-server --version` 自检，再原子安装。
 
-当前自动下载支持 `x86_64`、`amd64`、`aarch64` 和 `arm64` 机器名。其他架构需要自行提供 `/etc/hop/core/hop-server`。
-
-查看状态和日志：
+进入 **Services → Hop → Management Panel**，输入 `/etc/hop/config.toml` 中的网页管理 Token。随包 Token 是仅供首次进入的 `change-me`；请立即替换为随机长字符串：
 
 ```sh
-/usr/share/hop/hop-core status
-/etc/init.d/hop status
-logread -e hop
+token=$(head -c 32 /dev/urandom | hexdump -v -e '/1 "%02x"')
+sed -i "s/token = \"change-me\"/token = \"$token\"/" /etc/hop/config.toml
+chmod 0600 /etc/hop/config.toml
+/etc/init.d/hop restart
 ```
 
-## LuCI 和 UCI 字段
+重启后在面板中输入新 Token。Token 只保存在当前页面内存，刷新后需要重新输入。
 
-LuCI 页面中的设置对应 `/etc/config/hop`：
+## UCI 服务设置
+
+默认配置：
 
 ```uci
 config hop 'main'
         option enabled '0'
         option config_path '/etc/hop/config.toml'
         option auto_download '1'
-        option core_version 'latest'
+        option core_version 'v0.2.3'
         option release_base 'https://github.com/oslo254804746/hop-rs/releases'
         option log_stdout '1'
         option log_stderr '1'
@@ -62,40 +70,30 @@ config hop 'main'
 | 字段 | 默认值 | 含义 |
 |---|---|---|
 | `enabled` | `0` | 是否由 procd 启动 Hop |
-| `config_path` | `/etc/hop/config.toml` | 传给 `hop-server --config` 的启动配置路径 |
-| `auto_download` | `1` | 核心缺失或固定版本不匹配时是否自动下载 |
-| `core_version` | `latest` | 下载 `latest`，或指定 `v0.2.0`、`0.2.0` 这类版本 |
-| `release_base` | 官方 GitHub Releases 地址 | 核心和 `SHA256SUMS` 的发布地址 |
-| `log_stdout` | `1` | 把标准输出交给 procd 日志 |
-| `log_stderr` | `1` | 把标准错误交给 procd 日志 |
+| `config_path` | `/etc/hop/config.toml` | 传给核心的启动配置 |
+| `auto_download` | `1` | 核心缺失或固定版本不匹配时自动下载 |
+| `core_version` | `v0.2.3` | 固定版本；也可以填写 `latest` |
+| `release_base` | 官方 GitHub Releases | 核心与校验文件的发布根地址 |
+| `log_stdout` / `log_stderr` | `1` | 把输出交给 procd 日志 |
 
-修改 UCI 后保存并重启：
+## GitHub 与加速下载源
+
+LuCI 的 **Core download source** 是可输入自定义值的组合框，预置：
+
+- 官方 GitHub Releases；
+- `gh-proxy.net`；
+- 任意兼容 GitHub Releases 路径结构的 HTTPS 地址。
+
+命令行切换到 `gh-proxy.net`：
 
 ```sh
+uci set hop.main.release_base='https://gh-proxy.net/https://github.com/oslo254804746/hop-rs/releases'
 uci commit hop
-/etc/init.d/hop restart
-```
-
-### 核心版本
-
-`core_version = latest` 适合手工更新。已有核心可用时，服务重启不会每次检查新版本；需要更新时，在 LuCI 中点击核心下载按钮，或执行：
-
-```sh
 /usr/share/hop/hop-core update
 /etc/init.d/hop restart
 ```
 
-希望固定版本时设置完整标签或版本号：
-
-```sh
-uci set hop.main.core_version='v0.2.0'
-uci commit hop
-/etc/init.d/hop restart
-```
-
-如果安装的 release marker 与固定版本不一致，下一次启动会重新下载。设置 `auto_download = 0` 后，核心缺失或不可执行会让服务启动失败。
-
-`release_base` 可以指向私有镜像，但目录结构必须兼容 GitHub Releases：
+下载器会访问：
 
 ```text
 <release_base>/latest/download/SHA256SUMS
@@ -103,36 +101,36 @@ uci commit hop
 <release_base>/download/<tag>/SHA256SUMS
 ```
 
-## Hop 启动配置
+第三方镜像可以同时替换压缩包和 `SHA256SUMS`，因此 SHA-256 只能检测传输损坏，不能让不可信镜像变可信。默认仍使用 GitHub；选择镜像前请自行确认运营方。
 
-软件包自带的 `/etc/hop/config.toml` 内容如下：
+查看或更新核心：
+
+```sh
+/usr/share/hop/hop-core status
+/usr/share/hop/hop-core update
+/etc/init.d/hop restart
+```
+
+## Hop 0.2.3 启动配置
+
+随包 `/etc/hop/config.toml`：
 
 ```toml
-[server]
-ssh_listen = "0.0.0.0:2222"
-
-[database]
-path = "/var/lib/hop/hop.db"
+listen = "0.0.0.0:2222"
+data_dir = "/var/lib/hop"
 
 [api]
-enabled = false
+enabled = true
 listen = "127.0.0.1:8083"
-token_file = "/var/lib/hop/api.token"
+token = "change-me"
 cors_allowlist = []
 
 [ssh]
-host_key_file = "/var/lib/hop/host_key"
 host_key_type = "ed25519"
 banner = "Welcome to Hop"
 keepalive_interval = 30
 connect_timeout = 10
 proxy_policy = "assets_only"
-
-[security]
-master_key_file = "/var/lib/hop/master.key"
-
-[inventory]
-sources = []
 
 [runtime]
 temp_dir = "/tmp/hop"
@@ -140,164 +138,39 @@ log_level = "info"
 session_retention_days = 30
 ```
 
-默认行为：
+0.2.3 使用顶层 `listen`、`data_dir` 和直接的 `api.token`。旧版 `[server]`、`[database]`、`api.token_file`、`[security]`、`[inventory]` 字段已经不再支持。
 
-- SSH 监听所有接口的 `2222` 端口。
-- HTTP Control API 关闭。
-- SQLite、Master Key 和 Host Key 保存在 `/var/lib/hop`。
-- 没有配置资源清单来源。
+## 面板与 API 安全边界
 
-修改监听地址、数据库路径或其他启动字段后，需要重启服务。完整字段说明见 [Hop 配置参考](https://github.com/oslo254804746/hop-rs/blob/master/docs/configuration.zh-CN.md)。
+面板文档由 LuCI 登录路由返回，并发送 CSP、`X-Frame-Options: DENY`、`nosniff` 和 `no-referrer`。API 代理同时要求：
 
-## 使用资源清单完成首次配置
+1. 有效 LuCI 会话和 `luci-app-hop` ACL；
+2. 浏览器内存中的 Hop Bearer Token；
+3. 请求方法与路径属于随包白名单。
 
-OpenWrt 上推荐用资源清单管理 Access Key、SSH 资产和 TCP 资产。这样不需要在 root 和 `hop` 用户之间反复处理 CLI 写入权限。
+代理只连接 `127.0.0.1:8083`，拒绝查询串、未知 API、目录穿越、超大请求和非白名单方法。不要把 `api.listen` 改为 `0.0.0.0:8083`；跨机器管理应优先通过 VPN 或单独的 TLS 反向代理。
 
-### 1. 准备目录
+## 资源归属
 
-```sh
-mkdir -p /etc/hop/resources.d /etc/hop/keys /etc/hop/secrets
-chown root:hop /etc/hop/resources.d /etc/hop/keys /etc/hop/secrets
-chmod 0750 /etc/hop/resources.d /etc/hop/keys /etc/hop/secrets
-```
+在网页或本地 CLI 创建的资源归属为 `local`，可以在面板中编辑。直接写入启动配置的资源归属为 `config`，面板会只读展示，需要修改 `/etc/hop/config.toml` 后重启。
 
-把用于登录 Hop 的公钥保存为 `/etc/hop/keys/laptop.pub`：
-
-```sh
-chmod 0644 /etc/hop/keys/laptop.pub
-```
-
-如果 Hop 需要托管目标 SSH 登录，把目标密码或私钥放到 `/etc/hop/secrets`。例如：
-
-```sh
-chown root:hop /etc/hop/secrets/nas-root
-chmod 0640 /etc/hop/secrets/nas-root
-```
-
-### 2. 创建资源文件
-
-将以下内容保存为 `/etc/hop/resources.d/home.yaml`：
-
-```yaml
-api_version: hop/v1alpha1
-
-credentials:
-  nas-root:
-    type: ssh_key
-    username: root
-    private_key:
-      file: /etc/hop/secrets/nas-root
-
-assets:
-  nas:
-    type: ssh
-    host: 192.168.1.20
-    port: 22
-    credential: nas-root
-
-  windows-rdp:
-    type: tcp
-    host: 192.168.1.30
-    port: 3389
-
-access:
-  laptop:
-    public_key:
-      file: /etc/hop/keys/laptop.pub
-```
-
-```sh
-chown root:hop /etc/hop/resources.d/home.yaml
-chmod 0640 /etc/hop/resources.d/home.yaml
-```
-
-当前资产类型只有 `ssh` 和 `tcp`。RDP、MySQL、Redis 等服务都配置为 `tcp`，不需要单独的类型别名。
-
-### 3. 启用资源来源
-
-编辑 `/etc/hop/config.toml`，删除：
+例如在 TOML 中声明一个资产：
 
 ```toml
-[inventory]
-sources = []
+[assets.router]
+type = "ssh"
+host = "192.168.1.1"
+port = 22
+display_name = "Main router"
 ```
 
-替换为：
+对于包含密码、私钥或入口公钥的完整配置，请参考 [Hop 配置参考](https://github.com/oslo254804746/hop-rs/blob/master/docs/configuration.zh-CN.md)。
 
-```toml
-[[inventory.sources]]
-id = "openwrt"
-path = "/etc/hop/resources.d/*.yaml"
-watch = true
-prune = false
-```
+## 防火墙、备份与排错
 
-离线校验后重启：
+`luci-app-hop` 不修改防火墙。LAN 能否访问 `2222` 取决于现有 zone 策略；不建议直接从 WAN 暴露入口。
 
-```sh
-su -s /bin/ash -c \
-  '/etc/hop/core/hop-server config validate -f /etc/hop/resources.d/home.yaml --offline' \
-  hop
-
-/etc/init.d/hop restart
-logread -e hop
-```
-
-Hop 会在启动时 apply 资源文件。`watch = true` 时，后续修改会自动生效；无效文件不会覆盖上一份有效 Catalog。
-
-### 4. 测试 SSH 和 TCP
-
-从电脑连接路由器上的 Hop：
-
-```bash
-ssh -p 2222 menu@192.168.1.1
-ssh -p 2222 nas@192.168.1.1
-```
-
-转发 RDP：
-
-```bash
-ssh -N -T -p 2222 \
-  -L 13389:windows-rdp.hop:3389 \
-  menu@192.168.1.1
-```
-
-RDP 客户端随后连接 `127.0.0.1:13389`。更多连接方式见 [SSH 与 TCP 代理](https://github.com/oslo254804746/hop-rs/blob/master/docs/proxying.zh-CN.md)。
-
-## Control API
-
-LuCI 页面不使用 Hop Control API，也不管理 Catalog 资源。默认配置中的 `api.enabled = false` 不会打开 HTTP 端口。
-
-如果外部面板需要 API，先创建 Token：
-
-```sh
-umask 077
-head -c 32 /dev/urandom | hexdump -v -e '/1 "%02x"' > /var/lib/hop/api.token
-chown hop:hop /var/lib/hop/api.token
-chmod 0600 /var/lib/hop/api.token
-```
-
-然后修改 `/etc/hop/config.toml`：
-
-```toml
-[api]
-enabled = true
-listen = "127.0.0.1:8083"
-token_file = "/var/lib/hop/api.token"
-cors_allowlist = []
-```
-
-重启后，API 仍只监听路由器本机。远程开放 API 前需要单独配置 TLS、认证和防火墙。
-
-## 防火墙
-
-`luci-app-hop` 不修改 OpenWrt 防火墙。LAN 区域能否访问路由器的 `2222` 端口取决于现有 zone 策略。
-
-如果需要从 WAN 访问，建议先通过 VPN 进入家庭网络。直接开放 SSH 端口时，应创建范围尽可能小的防火墙规则，并确认 Access Key 只包含需要的资产。
-
-## 备份
-
-停止服务后备份以下目录：
+备份：
 
 ```sh
 /etc/init.d/hop stop
@@ -305,16 +178,13 @@ tar -czf /tmp/hop-backup.tgz /etc/config/hop /etc/hop /var/lib/hop
 /etc/init.d/hop start
 ```
 
-`/var/lib/hop` 中的数据库和 Master Key 必须成对保留。只恢复数据库无法解密托管凭据。
-
-## 排错
+数据库和 `/var/lib/hop/hop.secret` 必须成对恢复，否则无法解密托管凭据。
 
 | 现象 | 检查项 |
 |---|---|
-| 核心下载失败 | 系统时间、DNS、CA 证书、`release_base` 和 `logread -e hop-core` |
-| `unsupported Hop core architecture` | `uname -m` 是否属于当前支持的机器名 |
-| 服务没有运行 | `enabled`、`config_path`、核心状态和 `logread -e hop` |
-| 资源文件没有生效 | `watch`、文件权限和 `config validate` 输出 |
-| SSH 公钥被拒绝 | `access` 中的公钥文件是否完整，Catalog 是否成功 apply |
-| TCP 转发被拒绝 | 资产名称、端口和 Access Key 白名单 |
-| 修改 UCI 后无变化 | 是否执行了 `uci commit hop` 和服务重启 |
+| 核心下载失败 | 系统时间、DNS、CA、下载源和 `logread -e hop-core` |
+| 面板返回 502 | 服务是否运行、API 是否启用、`127.0.0.1:8083` 是否监听 |
+| 面板返回 401 | `/etc/hop/config.toml` 中的 Token 是否一致 |
+| 面板返回 403 | LuCI 会话或 `luci-app-hop` ACL 是否有效 |
+| 服务无法启动 | 配置是否仍包含旧字段，查看 `logread -e hop` |
+| 修改配置后无变化 | 是否重启 Hop；配置归属资源只在启动时应用 |

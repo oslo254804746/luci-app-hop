@@ -8,7 +8,8 @@ This repository contains the lightweight OpenWrt control package for Hop. It
 does **not** compile or embed the Rust daemon. `luci-app-hop` is an `all`
 architecture package containing only:
 
-- the LuCI service page;
+- the full static Hop management panel and LuCI service page;
+- a LuCI-authenticated, path-restricted proxy to the loopback Control API;
 - a procd init script and UCI service settings;
 - a small downloader that installs a verified, architecture-specific core;
 - the strict Hop startup configuration.
@@ -33,9 +34,10 @@ SHA256SUMS
 Each archive contains one executable named `hop-server`. The two supported
 router machine families are `x86_64`/`amd64` and `aarch64`/`arm64`.
 
-The default `core_version` is `latest`. It can be pinned to `v0.2.0` (or
-`0.2.0`) in LuCI or UCI. `release_base` defaults to the official Hop GitHub
-Releases URL.
+The default `core_version` is pinned to `v0.2.3` to match the bundled panel. It
+can be changed to `latest` or another version in LuCI or UCI. `release_base`
+defaults to the official Hop GitHub Releases URL; the LuCI combobox also offers
+`gh-proxy.net` and accepts a custom HTTPS GitHub-compatible mirror.
 
 ## Install and start
 
@@ -61,6 +63,11 @@ explicitly:
 Set `auto_download` to `0` if startup must fail rather than download a missing
 core.
 
+The management panel is available at **Services → Hop → Management Panel**.
+Its document is served only after LuCI authentication. The browser supplies the
+Hop management Token in memory, and the narrow controller proxy forwards only
+the documented API methods and paths to `127.0.0.1:8083`.
+
 ## Configuration boundary
 
 UCI owns only service and core-delivery concerns:
@@ -70,17 +77,17 @@ UCI owns only service and core-delivery concerns:
 - stdout/stderr forwarding to the OpenWrt log.
 
 Assets, credentials, Access Keys, and key-to-asset allowlists remain in the Hop
-Catalog. They are managed through strict manifests, the local CLI, or the
-optional local Control API. The shipped `/etc/hop/config.toml` keeps
-`api.enabled = false`, so installation does not expose an HTTP listener.
+Catalog. They can be managed from the bundled panel, the local CLI, or the
+strict startup configuration. The shipped `/etc/hop/config.toml` enables the
+Control API only on loopback; no API port is exposed to LAN clients.
 
 The daemon runs as the unprivileged `hop` user. The downloader alone runs as
 root because it owns `/etc/hop/core`; it accepts only the named release asset,
 verifies SHA-256 before extraction, and never reads or edits the Catalog.
 
-The [Chinese configuration guide](docs/configuration.zh-CN.md) documents every
-LuCI/UCI option, the shipped Hop startup file, first-run SSH and TCP assets,
-resource watching, core updates, firewall scope, and backup.
+The [Chinese configuration guide](docs/configuration.zh-CN.md) documents the
+panel, LuCI/UCI fields, download mirrors, Token rotation, startup configuration,
+firewall scope, and backup.
 
 ## Cloud validation
 
@@ -93,9 +100,10 @@ Only x86/64 SDKs are needed because the package itself is architecture
 independent. The downloaded Hop core is selected on the router at runtime.
 The workflow verifies every SDK checksum. Runtime dependencies are recorded in
 the package metadata without fetching or compiling LuCI feeds, and the workflow
-does not check out or compile `hop-rs`. A 256 KiB package-size gate prevents an
-architecture-specific Hop core from being embedded accidentally; current
-control packages are only a few kilobytes.
+does not check out or compile `hop-rs`. A 256 KiB compressed package-size gate
+prevents an architecture-specific Hop core from being embedded accidentally;
+the bundled panel remains a small static asset set and requires no Node.js on
+the router.
 
 Run the fast repository tests locally with:
 
