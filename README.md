@@ -14,6 +14,10 @@ architecture package containing only:
 - a small downloader that installs a verified, architecture-specific core;
 - the strict Hop startup configuration.
 
+The package also ships `/usr/share/hop/panel.version`, a generated marker that
+records the bundled panel source (`hop-rs-frontend`) and frontend version. The
+marker is refreshed by `scripts/sync-frontend.sh` alongside the static assets.
+
 When Hop is enabled and no usable core exists, the init script downloads the
 matching prebuilt binary from
 [`oslo254804746/hop-rs` Releases](https://github.com/oslo254804746/hop-rs/releases),
@@ -34,7 +38,7 @@ SHA256SUMS
 Each archive contains one executable named `hop-server`. The two supported
 router machine families are `x86_64`/`amd64` and `aarch64`/`arm64`.
 
-The default `core_version` is pinned to `v0.2.4` to match the bundled panel. It
+The default `core_version` is pinned to `v0.2.8` to match the bundled panel. It
 can be changed to `latest` or another version in LuCI or UCI. `release_base`
 defaults to the official Hop GitHub Releases URL; the LuCI combobox also offers
 `gh-proxy.net` and accepts a custom HTTPS GitHub-compatible mirror.
@@ -65,8 +69,10 @@ core.
 
 The management panel is available at **Services → Hop → Management Panel**.
 Its document is served only after LuCI authentication. The browser supplies the
-Hop management Token in memory, and the narrow controller proxy forwards only
-the documented API methods and paths to `127.0.0.1:8083`.
+Hop management Token in the current tab's `sessionStorage`. On refresh the panel
+revalidates the saved Token against the Control API; closing the tab or choosing
+Forget instance clears the saved credentials. The narrow controller proxy
+forwards only the documented API methods and paths to `127.0.0.1:8083`.
 
 ## Configuration boundary
 

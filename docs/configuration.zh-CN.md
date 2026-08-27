@@ -12,8 +12,9 @@ Hop 核心仍然是按 CPU 架构单独下载的静态程序，不会编译进 L
 | 路径或端口 | 用途 |
 |---|---|
 | `/etc/config/hop` | UCI 服务、版本和下载源设置 |
-| `/etc/hop/config.toml` | Hop 0.2.4 启动配置和网页管理 Token |
+| `/etc/hop/config.toml` | Hop 0.2.8 启动配置和网页管理 Token |
 | `/etc/hop/core/hop-server` | 下载并校验后的核心程序 |
+| `/usr/share/hop/panel.version` | 随静态面板生成的来源和版本标记 |
 | `/var/lib/hop` | SQLite、加密主密钥和 SSH Host Key |
 | `0.0.0.0:2222` | 默认入口 SSH 监听 |
 | `127.0.0.1:8083` | 仅供 LuCI 代理访问的 Control API |
@@ -50,7 +51,7 @@ chmod 0600 /etc/hop/config.toml
 /etc/init.d/hop restart
 ```
 
-重启后在面板中输入新 Token。Token 只保存在当前页面内存，刷新后需要重新输入。
+重启后在面板中输入新 Token。Token 只保存在当前标签页的 `sessionStorage`；刷新页面时，面板会向 Control API 重新校验并恢复连接。关闭标签页或点击“忘记连接”会清除已保存的凭据。
 
 ## UCI 服务设置
 
@@ -61,7 +62,7 @@ config hop 'main'
         option enabled '0'
         option config_path '/etc/hop/config.toml'
         option auto_download '1'
-        option core_version 'v0.2.4'
+        option core_version 'v0.2.8'
         option release_base 'https://github.com/oslo254804746/hop-rs/releases'
         option log_stdout '1'
         option log_stderr '1'
@@ -72,7 +73,7 @@ config hop 'main'
 | `enabled` | `0` | 是否由 procd 启动 Hop |
 | `config_path` | `/etc/hop/config.toml` | 传给核心的启动配置 |
 | `auto_download` | `1` | 核心缺失或固定版本不匹配时自动下载 |
-| `core_version` | `v0.2.4` | 固定版本；也可以填写 `latest` |
+| `core_version` | `v0.2.8` | 固定版本；也可以填写 `latest` |
 | `release_base` | 官方 GitHub Releases | 核心与校验文件的发布根地址 |
 | `log_stdout` / `log_stderr` | `1` | 把输出交给 procd 日志 |
 
@@ -111,7 +112,7 @@ uci commit hop
 /etc/init.d/hop restart
 ```
 
-## Hop 0.2.4 启动配置
+## Hop 0.2.8 启动配置
 
 随包 `/etc/hop/config.toml`：
 
@@ -138,14 +139,14 @@ log_level = "info"
 session_retention_days = 30
 ```
 
-0.2.4 使用顶层 `listen`、`data_dir` 和直接的 `api.token`。旧版 `[server]`、`[database]`、`api.token_file`、`[security]`、`[inventory]` 字段已经不再支持。
+0.2.8 使用顶层 `listen`、`data_dir` 和直接的 `api.token`。旧版 `[server]`、`[database]`、`api.token_file`、`[security]`、`[inventory]` 字段已经不再支持。
 
 ## 面板与 API 安全边界
 
 面板文档由 LuCI 登录路由返回，并发送 CSP、`X-Frame-Options: DENY`、`nosniff` 和 `no-referrer`。API 代理同时要求：
 
 1. 有效 LuCI 会话和 `luci-app-hop` ACL；
-2. 浏览器内存中的 Hop Bearer Token；
+2. 当前标签页 `sessionStorage` 中、并经 Control API 校验的 Hop Bearer Token；
 3. 请求方法与路径属于随包白名单。
 
 代理只连接 `127.0.0.1:8083`，拒绝查询串、未知 API、目录穿越、超大请求和非白名单方法。不要把 `api.listen` 改为 `0.0.0.0:8083`；跨机器管理应优先通过 VPN 或单独的 TLS 反向代理。

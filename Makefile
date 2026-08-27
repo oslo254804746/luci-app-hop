@@ -1,7 +1,7 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-hop
-PKG_VERSION:=0.2.4
+PKG_VERSION:=0.2.8
 PKG_RELEASE:=1
 PKG_MAINTAINER:=Hop maintainers
 PKG_LICENSE:=MIT
@@ -48,6 +48,7 @@ define Package/luci-app-hop/install
 	$(INSTALL_BIN) ./root/etc/init.d/hop $(1)/etc/init.d/hop
 	$(INSTALL_DIR) $(1)/usr/share/hop
 	$(INSTALL_BIN) ./root/usr/share/hop/hop-core $(1)/usr/share/hop/hop-core
+	$(INSTALL_DATA) ./root/usr/share/hop/panel.version $(1)/usr/share/hop/panel.version
 	$(INSTALL_DIR) $(1)/usr/share/hop/panel
 	$(INSTALL_DATA) ./root/usr/share/hop/panel/index.html \
 		$(1)/usr/share/hop/panel/index.html

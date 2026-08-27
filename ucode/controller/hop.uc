@@ -247,7 +247,7 @@ function proxy_request(method, path, authorization, body) {
 		'Host: 127.0.0.1:8083',
 		'Accept: application/json',
 		`Authorization: ${authorization}`,
-		'User-Agent: luci-app-hop/0.2.4',
+		'User-Agent: luci-app-hop/0.2.8',
 		'Connection: close'
 	];
 

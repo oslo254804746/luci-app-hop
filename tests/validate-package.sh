@@ -13,7 +13,12 @@ acl_json=$repo_dir/root/usr/share/rpcd/acl.d/luci-app-hop.json
 controller=$repo_dir/ucode/controller/hop.uc
 panel_index=$repo_dir/root/usr/share/hop/panel/index.html
 panel_assets=$repo_dir/htdocs/hop/assets
+panel_marker=$repo_dir/root/usr/share/hop/panel.version
 sync_script=$repo_dir/scripts/sync-frontend.sh
+
+expected_version=$(sed -n 's/^PKG_VERSION:=//p' "$makefile")
+expected_tag=v$expected_version
+test "$expected_version" = '0.2.8'
 
 required_files=(
 	"$makefile"
@@ -26,6 +31,7 @@ required_files=(
 	"$acl_json"
 	"$controller"
 	"$panel_index"
+	"$panel_marker"
 	"$sync_script"
 )
 for path in "${required_files[@]}"; do
@@ -54,11 +60,13 @@ python3 -m json.tool "$menu_json" >/dev/null
 python3 -m json.tool "$acl_json" >/dev/null
 
 grep -Fq 'PKG_NAME:=luci-app-hop' "$makefile"
+grep -Fq "PKG_VERSION:=$expected_version" "$makefile"
 grep -Fq 'PKGARCH:=all' "$makefile"
 grep -Fq 'ucode-mod-socket (>=0)' "$makefile"
 grep -Fq 'curl (>=0)' "$makefile"
 grep -Fq 'define Build/Compile' "$makefile"
 grep -Fq "\$(INSTALL_BIN) ./root/usr/share/hop/hop-core" "$makefile"
+grep -Fq "\$(INSTALL_DATA) ./root/usr/share/hop/panel.version" "$makefile"
 grep -Fq "\$(INSTALL_DATA) ./htdocs/luci-static/resources/view/hop/settings.js" "$makefile"
 grep -Fq "\$(INSTALL_DATA) ./ucode/controller/hop.uc" "$makefile"
 grep -Fq "\$(CP) ./htdocs/hop/assets/." "$makefile"
@@ -88,7 +96,7 @@ grep -Fq 'x86_64 | amd64' "$manager"
 grep -Fq 'aarch64 | arm64' "$manager"
 grep -Fq "option enabled '0'" "$uci_config"
 grep -Fq "option auto_download '1'" "$uci_config"
-grep -Fq "option core_version 'v0.2.4'" "$uci_config"
+grep -Fq "option core_version '$expected_tag'" "$uci_config"
 grep -Fq 'listen = "0.0.0.0:2222"' "$startup_config"
 grep -Fq 'data_dir = "/var/lib/hop"' "$startup_config"
 grep -Fq 'enabled = true' "$startup_config"
@@ -101,7 +109,8 @@ fi
 grep -Fq "\"\$CORE_MANAGER\" ensure" "$init_script"
 grep -Fq "\"\$CORE\" --version" "$init_script"
 grep -Fq 'gh-proxy.net/' "$luci_view"
-grep -Fq "o.default = 'v0.2.4'" "$luci_view"
+grep -Fq "o.default = '$expected_tag'" "$luci_view"
+grep -Fq "tag such as $expected_tag" "$luci_view"
 grep -Fq 'Third-party mirrors can replace both the archive and its checksum' "$luci_view"
 grep -Fq '"function": "action_panel"' "$menu_json"
 grep -Fq '"function": "action_api"' "$menu_json"
@@ -112,6 +121,13 @@ grep -Fq "socket.addrinfo('127.0.0.1', 8083" "$controller"
 grep -Fq "http.getenv('HTTP_AUTHORIZATION')" "$controller"
 grep -Fq "path == '/known-hosts'" "$controller"
 grep -Fq "method == 'POST' || method == 'PUT' || method == 'DELETE'" "$controller"
+grep -Fq "User-Agent: luci-app-hop/$expected_version" "$controller"
+grep -Fq "pinned to \`$expected_tag\`" "$repo_dir/README.md"
+grep -Fq "| \`core_version\` | \`$expected_tag\`" "$repo_dir/docs/configuration.zh-CN.md"
+grep -Fq "## Hop $expected_version 启动配置" "$repo_dir/docs/configuration.zh-CN.md"
+grep -Fq "source=hop-rs-frontend" "$panel_marker"
+grep -Fq "version=$expected_version" "$panel_marker"
+test "$(grep -c '^version=' "$panel_marker")" -eq 1
 
 while IFS= read -r asset; do
 	test -f "$repo_dir/htdocs${asset}"

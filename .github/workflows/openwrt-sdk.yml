@@ -3,6 +3,8 @@ name: LuCI package
 on:
   push:
     branches: [dev]
+    tags: ['v*']
+  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -17,6 +19,14 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
+      - name: Verify release tag matches package version
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          set -euo pipefail
+          package_version=$(sed -n 's/^PKG_VERSION:=//p' Makefile)
+          test "$GITHUB_REF_NAME" = "v$package_version"
+          echo "Verified package tag $GITHUB_REF_NAME matches version $package_version"
       - name: Install validation tools
         run: sudo apt-get update && sudo apt-get install --yes shellcheck
       - name: Validate package boundary and core manager
@@ -24,6 +34,9 @@ jobs:
 
   sdk-package:
     needs: package-structure
+    # SDK builds are deliberately kept off pull requests; structural checks
+    # still run there, while branch and release pushes exercise packaging.
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     strategy:

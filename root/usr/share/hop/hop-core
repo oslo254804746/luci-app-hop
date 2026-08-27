@@ -3,6 +3,9 @@
 set -eu
 
 DEFAULT_RELEASE_BASE=https://github.com/oslo254804746/hop-rs/releases
+# Keep the release marker and the binary self-check on the same, strict
+# semantic-version vocabulary. The core itself prints `hop-server X.Y.Z`.
+SEMVER_RE='^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$'
 
 core_dir=${HOP_CORE_DIR:-/etc/hop/core}
 core_path=$core_dir/hop-server
@@ -17,6 +20,38 @@ lock_held=0
 log() {
 	logger -t hop-core "$*" 2>/dev/null || true
 	printf '%s\n' "$*" >&2
+}
+
+is_semver() {
+	printf '%s\n' "$1" | grep -Eq "$SEMVER_RE"
+}
+
+normalize_version_tag() {
+	local value
+
+	value=$1
+	case "$value" in
+		v*) value=${value#v} ;;
+	esac
+
+	# Apart from making the result one line, this rejects shell/control
+	# characters before the ERE is evaluated by grep.
+	case "$value" in
+		*[!0-9A-Za-z.+-]*) return 1 ;;
+	esac
+	is_semver "$value" || return 1
+	printf 'v%s\n' "$value"
+}
+
+version_tag_from_output() {
+	local output value
+
+	output=$1
+	case "$output" in
+		hop-server\ *) value=${output#hop-server } ;;
+		*) return 1 ;;
+	esac
+	normalize_version_tag "$value"
 }
 
 load_settings() {
@@ -101,14 +136,31 @@ download() {
 		--output "$destination" "$url"
 }
 
+core_version_tag() {
+	local version_output
+
+	[ -x "$core_path" ] || return 1
+	version_output=$("$core_path" --version 2>/dev/null) || return 1
+	version_tag_from_output "$version_output"
+}
+
 core_is_usable() {
-	[ -x "$core_path" ] && "$core_path" --version >/dev/null 2>&1
+	core_version_tag >/dev/null 2>&1
 }
 
 install_core() {
-	local actual arch archive asset base candidate expected sums version_output
+	local actual actual_tag arch archive asset base candidate expected expected_tag
+	local release_tag sums version_output
 
 	load_settings
+	if [ "$core_version" = latest ]; then
+		expected_tag=
+	else
+		expected_tag=$(normalize_version_tag "$core_version") || {
+			log "invalid Hop core release version: $core_version"
+			return 1
+		}
+	fi
 	arch=$(detect_arch) || return 1
 	asset=hop-server-linux-${arch}-musl.tar.gz
 	base=$(release_download_base)
@@ -168,22 +220,43 @@ install_core() {
 			return 1
 			;;
 	esac
+	actual_tag=$(version_tag_from_output "$version_output") || {
+		log "downloaded Hop core reported an invalid semantic version"
+		return 1
+	}
+	if [ "$core_version" != latest ] && [ "$actual_tag" != "$expected_tag" ]; then
+		log "downloaded Hop core $actual_tag does not match requested release $expected_tag"
+		return 1
+	fi
+	release_tag=$actual_tag
 
 	mkdir -p "$core_dir"
 	cp "$candidate" "$core_path.new.$$"
 	chmod 0755 "$core_path.new.$$"
-	printf '%s\n' "$core_version" >"$release_marker.new.$$"
+	# For `latest`, retain the version emitted by the verified binary rather
+	# than the moving selector. This leaves an auditable release tag on disk.
+	printf '%s\n' "$release_tag" >"$release_marker.new.$$"
 	mv -f "$core_path.new.$$" "$core_path"
 	mv -f "$release_marker.new.$$" "$release_marker"
 	log "installed $version_output"
 }
 
 ensure_core() {
-	local installed_release
+	local expected_tag installed_release installed_tag
 
 	load_settings
+	if [ "$core_version" = latest ]; then
+		expected_tag=
+	else
+		expected_tag=$(normalize_version_tag "$core_version") || {
+			log "invalid Hop core release version: $core_version"
+			return 1
+		}
+	fi
 	installed_release=$(cat "$release_marker" 2>/dev/null || true)
-	if core_is_usable && { [ "$core_version" = latest ] || [ "$installed_release" = "$core_version" ]; }; then
+	installed_tag=$(core_version_tag 2>/dev/null || true)
+	if [ -n "$installed_tag" ] && [ "$installed_release" = "$installed_tag" ] &&
+		{ [ "$core_version" = latest ] || [ "$installed_tag" = "$expected_tag" ]; }; then
 		return 0
 	fi
 	install_core
