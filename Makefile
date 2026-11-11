@@ -1,7 +1,7 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-hop
-PKG_VERSION:=0.2.8
+PKG_VERSION:=0.2.9
 PKG_RELEASE:=1
 PKG_MAINTAINER:=Hop maintainers
 PKG_LICENSE:=MIT
