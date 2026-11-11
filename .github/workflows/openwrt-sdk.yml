@@ -127,3 +127,42 @@ jobs:
           path: artifacts/${{ matrix.name }}
           if-no-files-found: error
           retention-days: 14
+
+  release:
+    needs: sdk-package
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Download built OpenWrt packages
+        uses: actions/download-artifact@v4
+        with:
+          pattern: luci-app-hop-*
+          path: dist
+          merge-multiple: false
+
+      - name: Collect release assets and unified SHA256SUMS
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          mapfile -d '' ipks < <(find dist -type f -name 'luci-app-hop*.ipk' -print0)
+          mapfile -d '' apks < <(find dist -type f -name 'luci-app-hop*.apk' -print0)
+          test "${#ipks[@]}" -eq 1
+          test "${#apks[@]}" -eq 1
+          cp "${ipks[0]}" "${apks[0]}" release-assets/
+          (
+            cd release-assets
+            sha256sum luci-app-hop* >SHA256SUMS
+          )
+          cat release-assets/SHA256SUMS
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release-assets/*.ipk
+            release-assets/*.apk
+            release-assets/SHA256SUMS
+          generate_release_notes: true

@@ -13,7 +13,7 @@ const BLOCK_SIZE = 8192;
 const MAX_HEADER_SIZE = 16384;
 const MAX_REQUEST_BODY = 1024 * 100;
 const MAX_RESPONSE_BODY = 1024 * 2048;
-const POLL_TIMEOUT = 5000;
+const POLL_TIMEOUT = 15000;
 
 function json_error(status, reason, code, message) {
 	http.status(status, reason);
@@ -57,14 +57,15 @@ function api_suffix() {
 
 function allowed_request(method, path) {
 	if (method == 'GET') {
-		return !!match(path, /^\/(status|assets|credentials|access-keys|sessions|known-hosts)$/) ||
+		return !!match(path, /^\/(status|assets|credentials|access-keys|sessions|known-hosts|audit-events)$/) ||
 			path == '/catalog/revision';
 	}
 
 	if (method == 'POST') {
 		return !!match(path, /^\/(assets|credentials|access-keys)$/) ||
-			!!match(path, /^\/sessions\/[^/]+\/terminate$/) ||
-			!!match(path, /^\/config\/(validate|diff|apply)$/);
+			path == '/assets/probe' ||
+			!!match(path, /^\/assets\/[^/]+\/probe$/) ||
+			!!match(path, /^\/sessions\/[^/]+\/terminate$/);
 	}
 
 	if (method == 'PUT') {
@@ -247,7 +248,7 @@ function proxy_request(method, path, authorization, body) {
 		'Host: 127.0.0.1:8083',
 		'Accept: application/json',
 		`Authorization: ${authorization}`,
-		'User-Agent: luci-app-hop/0.2.8',
+		'User-Agent: luci-app-hop/0.2.9',
 		'Connection: close'
 	];
 

@@ -18,7 +18,7 @@ sync_script=$repo_dir/scripts/sync-frontend.sh
 
 expected_version=$(sed -n 's/^PKG_VERSION:=//p' "$makefile")
 expected_tag=v$expected_version
-test "$expected_version" = '0.2.8'
+test "$expected_version" = '0.2.9'
 
 required_files=(
 	"$makefile"
@@ -119,7 +119,13 @@ grep -Fq 'name="hop-control-api-base"' "$panel_index"
 grep -Fq "const API_ROUTE = '/admin/services/hop/api/v1'" "$controller"
 grep -Fq "socket.addrinfo('127.0.0.1', 8083" "$controller"
 grep -Fq "http.getenv('HTTP_AUTHORIZATION')" "$controller"
+grep -Fq 'audit-events' "$controller"
+grep -Fq "path == '/assets/probe'" "$controller"
 grep -Fq "path == '/known-hosts'" "$controller"
+if grep -Fq '/config/' "$controller"; then
+	echo 'LuCI controller must not proxy retired /config manifest endpoints' >&2
+	exit 1
+fi
 grep -Fq "method == 'POST' || method == 'PUT' || method == 'DELETE'" "$controller"
 grep -Fq "User-Agent: luci-app-hop/$expected_version" "$controller"
 grep -Fq "pinned to \`$expected_tag\`" "$repo_dir/README.md"

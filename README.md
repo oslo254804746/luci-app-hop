@@ -38,7 +38,7 @@ SHA256SUMS
 Each archive contains one executable named `hop-server`. The two supported
 router machine families are `x86_64`/`amd64` and `aarch64`/`arm64`.
 
-The default `core_version` is pinned to `v0.2.8` to match the bundled panel. It
+The default `core_version` is pinned to `v0.2.9` to match the bundled panel. It
 can be changed to `latest` or another version in LuCI or UCI. `release_base`
 defaults to the official Hop GitHub Releases URL; the LuCI combobox also offers
 `gh-proxy.net` and accepts a custom HTTPS GitHub-compatible mirror.
@@ -72,7 +72,8 @@ Its document is served only after LuCI authentication. The browser supplies the
 Hop management Token in the current tab's `sessionStorage`. On refresh the panel
 revalidates the saved Token against the Control API; closing the tab or choosing
 Forget instance clears the saved credentials. The narrow controller proxy
-forwards only the documented API methods and paths to `127.0.0.1:8083`.
+forwards only the documented API methods and paths (including on-demand target
+probes and audit event queries) to `127.0.0.1:8083`.
 
 ## Configuration boundary
 
@@ -95,12 +96,16 @@ The [Chinese configuration guide](docs/configuration.zh-CN.md) documents the
 panel, LuCI/UCI fields, download mirrors, Token rotation, startup configuration,
 firewall scope, and backup.
 
-## Cloud validation
+## Cloud validation and release publishing
 
-Pushes to `dev` run structural tests and two official SDK packaging checks:
+Pushes to `dev` and `v*` tags run structural tests and two official SDK
+packaging checks:
 
-- OpenWrt 24.10.4, which emits an IPK;
-- OpenWrt 25.12.5, which emits an APK.
+- OpenWrt 24.10.4, which emits an architecture-independent `.ipk`;
+- OpenWrt 25.12.5, which emits an architecture-independent `.apk`.
+
+Tagged `v*` pushes verify `PKG_VERSION` parity and publish the resulting
+`.ipk`, `.apk`, and `SHA256SUMS` directly to GitHub Releases.
 
 Only x86/64 SDKs are needed because the package itself is architecture
 independent. The downloaded Hop core is selected on the router at runtime.

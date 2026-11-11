@@ -18,7 +18,7 @@ return view.extend({
 		var ghProxyReleaseBase = 'https://gh-proxy.net/' + officialReleaseBase;
 
 		m = new form.Map('hop', _('Hop'),
-			_('This page controls the service and verified core download. Use the Management Panel tab for assets, credentials, Access Keys and sessions.'));
+			_('This page controls the service and verified core download. Use the Management Panel tab for assets, target probes, credentials, Access Keys, sessions and audit history.'));
 
 		s = m.section(form.TypedSection, 'hop', _('Service'));
 		s.anonymous = true;
@@ -36,9 +36,9 @@ return view.extend({
 		o.rmempty = false;
 
 		o = s.option(form.Value, 'core_version', _('Core release'));
-		o.default = 'v0.2.8';
+		o.default = 'v0.2.9';
 		o.rmempty = false;
-		o.description = _('Use latest, a tag such as v0.2.8, or a version such as 0.2.8. Keeping the bundled version avoids frontend/API mismatches.');
+		o.description = _('Use latest, a tag such as v0.2.9, or a version such as 0.2.9. Keeping the bundled version avoids frontend/API mismatches.');
 
 		o = s.option(form.Value, 'release_base', _('Core download source'));
 		o.default = officialReleaseBase;
