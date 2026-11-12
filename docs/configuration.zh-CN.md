@@ -3,7 +3,7 @@
 `luci-app-hop` 在 OpenWrt 上提供两部分能力：
 
 - 原生 LuCI 服务页负责启停 Hop、选择核心版本和下载源；
-- 内置 Vue 管理面板负责资产、按需连通性探测、目标凭据、入口公钥、会话与审计日志。
+- 内置 Vue 管理面板负责资产（含 `via` 链式跳板）、一键洗密纳管、按需与后台定时连通性拨测、Telegram/Bark/Webhook 告警通知、目标凭据、入口公钥、会话与审计日志。
 
 Hop 核心仍然是按 CPU 架构单独下载的静态程序，不会编译进 LuCI 包。
 
@@ -12,7 +12,7 @@ Hop 核心仍然是按 CPU 架构单独下载的静态程序，不会编译进 L
 | 路径或端口 | 用途 |
 |---|---|
 | `/etc/config/hop` | UCI 服务、版本和下载源设置 |
-| `/etc/hop/config.toml` | Hop 0.2.9 启动配置和网页管理 Token |
+| `/etc/hop/config.toml` | Hop 0.3.0 启动配置和网页管理 Token |
 | `/etc/hop/core/hop-server` | 下载并校验后的核心程序 |
 | `/usr/share/hop/panel.version` | 随静态面板生成的来源和版本标记 |
 | `/var/lib/hop` | SQLite、加密主密钥和 SSH Host Key |
@@ -62,7 +62,7 @@ config hop 'main'
         option enabled '0'
         option config_path '/etc/hop/config.toml'
         option auto_download '1'
-        option core_version 'v0.2.9'
+        option core_version 'v0.3.0'
         option release_base 'https://github.com/oslo254804746/hop-rs/releases'
         option log_stdout '1'
         option log_stderr '1'
@@ -73,7 +73,7 @@ config hop 'main'
 | `enabled` | `0` | 是否由 procd 启动 Hop |
 | `config_path` | `/etc/hop/config.toml` | 传给核心的启动配置 |
 | `auto_download` | `1` | 核心缺失或固定版本不匹配时自动下载 |
-| `core_version` | `v0.2.9` | 固定版本；也可以填写 `latest` |
+| `core_version` | `v0.3.0` | 固定版本；也可以填写 `latest` |
 | `release_base` | 官方 GitHub Releases | 核心与校验文件的发布根地址 |
 | `log_stdout` / `log_stderr` | `1` | 把输出交给 procd 日志 |
 
@@ -112,7 +112,7 @@ uci commit hop
 /etc/init.d/hop restart
 ```
 
-## Hop 0.2.9 启动配置
+## Hop 0.3.0 启动配置
 
 随包 `/etc/hop/config.toml`：
 
@@ -139,7 +139,7 @@ log_level = "info"
 session_retention_days = 30
 ```
 
-0.2.9 使用顶层 `listen`、`data_dir` 和直接的 `api.token`。旧版 `[server]`、`[database]`、`api.token_file`、`[security]`、`[inventory]` 字段已经不再支持。
+0.3.0 使用顶层 `listen`、`data_dir` 和直接的 `api.token`。旧版 `[server]`、`[database]`、`api.token_file`、`[security]`、`[inventory]` 字段已经不再支持。
 
 ## 面板与 API 安全边界
 
@@ -149,7 +149,7 @@ session_retention_days = 30
 2. 当前标签页 `sessionStorage` 中、并经 Control API 校验的 Hop Bearer Token；
 3. 请求方法与路径属于随包白名单。
 
-代理只连接 `127.0.0.1:8083`，拒绝查询串、未知 API、目录穿越、超大请求和非白名单方法。不要把 `api.listen` 改为 `0.0.0.0:8083`；跨机器管理应优先通过 VPN 或单独的 TLS 反向代理。
+代理只连接 `127.0.0.1:8083`，除拨测历史的受限数值 `limit` 参数外拒绝任意查询串、未知 API、目录穿越、超大请求和非白名单方法。不要把 `api.listen` 改为 `0.0.0.0:8083`；跨机器管理应优先通过 VPN 或单独的 TLS 反向代理。
 
 ## 资源归属
 

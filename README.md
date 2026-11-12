@@ -2,7 +2,7 @@
 
 [简体中文配置指南](docs/configuration.zh-CN.md)
 
-[![LuCI package](https://github.com/oslo254804746/luci-app-hop/actions/workflows/openwrt-sdk.yml/badge.svg?branch=dev)](https://github.com/oslo254804746/luci-app-hop/actions/workflows/openwrt-sdk.yml?query=branch%3Adev)
+[![LuCI package](https://github.com/oslo254804746/luci-app-hop/actions/workflows/openwrt-sdk.yml/badge.svg?branch=master)](https://github.com/oslo254804746/luci-app-hop/actions/workflows/openwrt-sdk.yml?query=branch%3Amaster)
 
 This repository contains the lightweight OpenWrt control package for Hop. It
 does **not** compile or embed the Rust daemon. `luci-app-hop` is an `all`
@@ -38,7 +38,7 @@ SHA256SUMS
 Each archive contains one executable named `hop-server`. The two supported
 router machine families are `x86_64`/`amd64` and `aarch64`/`arm64`.
 
-The default `core_version` is pinned to `v0.2.9` to match the bundled panel. It
+The default `core_version` is pinned to `v0.3.0` to match the bundled panel. It
 can be changed to `latest` or another version in LuCI or UCI. `release_base`
 defaults to the official Hop GitHub Releases URL; the LuCI combobox also offers
 `gh-proxy.net` and accepts a custom HTTPS GitHub-compatible mirror.
@@ -72,8 +72,9 @@ Its document is served only after LuCI authentication. The browser supplies the
 Hop management Token in the current tab's `sessionStorage`. On refresh the panel
 revalidates the saved Token against the Control API; closing the tab or choosing
 Forget instance clears the saved credentials. The narrow controller proxy
-forwards only the documented API methods and paths (including on-demand target
-probes and audit event queries) to `127.0.0.1:8083`.
+forwards only the documented API methods and paths (including chained target
+probes, SSH key bootstrap, scheduled probe policies, alert channels, and audit
+event queries) to `127.0.0.1:8083`.
 
 ## Configuration boundary
 
@@ -98,14 +99,16 @@ firewall scope, and backup.
 
 ## Cloud validation and release publishing
 
-Pushes to `dev` and `v*` tags run structural tests and two official SDK
-packaging checks:
+`dev` is the integration branch and `master` is the release mainline. Pushes to
+`dev`, `master`, and `v*.*.*` tags run structural tests and two official SDK
+packaging checks (uploading downloadable artifacts for testing):
 
 - OpenWrt 24.10.4, which emits an architecture-independent `.ipk`;
 - OpenWrt 25.12.5, which emits an architecture-independent `.apk`.
 
-Tagged `v*` pushes verify `PKG_VERSION` parity and publish the resulting
-`.ipk`, `.apk`, and `SHA256SUMS` directly to GitHub Releases.
+Tagged `v*.*.*` pushes must originate from `master`, verify `PKG_VERSION`
+parity, and publish the resulting `.ipk`, `.apk`, and `SHA256SUMS` directly to
+GitHub Releases.
 
 Only x86/64 SDKs are needed because the package itself is architecture
 independent. The downloaded Hop core is selected on the router at runtime.

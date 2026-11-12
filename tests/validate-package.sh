@@ -18,7 +18,7 @@ sync_script=$repo_dir/scripts/sync-frontend.sh
 
 expected_version=$(sed -n 's/^PKG_VERSION:=//p' "$makefile")
 expected_tag=v$expected_version
-test "$expected_version" = '0.2.9'
+test "$expected_version" = '0.3.0'
 
 required_files=(
 	"$makefile"
@@ -121,6 +121,10 @@ grep -Fq "socket.addrinfo('127.0.0.1', 8083" "$controller"
 grep -Fq "http.getenv('HTTP_AUTHORIZATION')" "$controller"
 grep -Fq 'audit-events' "$controller"
 grep -Fq "path == '/assets/probe'" "$controller"
+grep -Fq 'bootstrap-key' "$controller"
+grep -Fq 'probe-history' "$controller"
+grep -Fq "path == '/probe/settings'" "$controller"
+grep -Fq "path == '/notifications/channels'" "$controller"
 grep -Fq "path == '/known-hosts'" "$controller"
 if grep -Fq '/config/' "$controller"; then
 	echo 'LuCI controller must not proxy retired /config manifest endpoints' >&2

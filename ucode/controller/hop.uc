@@ -13,7 +13,7 @@ const BLOCK_SIZE = 8192;
 const MAX_HEADER_SIZE = 16384;
 const MAX_REQUEST_BODY = 1024 * 100;
 const MAX_RESPONSE_BODY = 1024 * 2048;
-const POLL_TIMEOUT = 15000;
+const POLL_TIMEOUT = 25000;
 
 function json_error(status, reason, code, message) {
 	http.status(status, reason);
@@ -55,27 +55,47 @@ function api_suffix() {
 	return length(suffix) ? suffix : '/';
 }
 
+function allowed_query(method, path, query) {
+	if (!length(query))
+		return true;
+
+	if (method == 'GET' &&
+		(path == '/assets/probe-history' || !!match(path, /^\/assets\/[^/]+\/probe-history$/)))
+		return !!match(query, /^limit=[0-9]{1,3}$/);
+
+	return false;
+}
+
 function allowed_request(method, path) {
 	if (method == 'GET') {
 		return !!match(path, /^\/(status|assets|credentials|access-keys|sessions|known-hosts|audit-events)$/) ||
-			path == '/catalog/revision';
+			path == '/catalog/revision' ||
+			path == '/assets/probe-history' ||
+			!!match(path, /^\/assets\/[^/]+\/probe-history$/) ||
+			path == '/probe/settings' ||
+			path == '/notifications/channels';
 	}
 
 	if (method == 'POST') {
 		return !!match(path, /^\/(assets|credentials|access-keys)$/) ||
 			path == '/assets/probe' ||
-			!!match(path, /^\/assets\/[^/]+\/probe$/) ||
+			!!match(path, /^\/assets\/[^/]+\/(probe|bootstrap-key)$/) ||
+			path == '/notifications/channels' ||
+			!!match(path, /^\/notifications\/channels\/[^/]+\/test$/) ||
 			!!match(path, /^\/sessions\/[^/]+\/terminate$/);
 	}
 
 	if (method == 'PUT') {
 		return !!match(path, /^\/(assets|credentials)\/[^/]+$/) ||
-			!!match(path, /^\/access-keys\/[^/]+\/(enabled|access)$/);
+			!!match(path, /^\/access-keys\/[^/]+\/(enabled|access)$/) ||
+			path == '/probe/settings' ||
+			!!match(path, /^\/notifications\/channels\/[^/]+$/);
 	}
 
 	if (method == 'DELETE')
 		return path == '/known-hosts' ||
-			!!match(path, /^\/(assets|credentials|access-keys)\/[^/]+$/);
+			!!match(path, /^\/(assets|credentials|access-keys)\/[^/]+$/) ||
+			!!match(path, /^\/notifications\/channels\/[^/]+$/);
 
 	return false;
 }
@@ -230,7 +250,7 @@ function read_close_body(sock, initial) {
 	return join('', chunks);
 }
 
-function proxy_request(method, path, authorization, body) {
+function proxy_request(method, path, query, authorization, body) {
 	let addresses = socket.addrinfo('127.0.0.1', 8083, { protocol: socket.IPPROTO_TCP });
 	let destination = addresses?.[0]?.addr ? socket.sockaddr(addresses[0].addr) : null;
 	let sock = destination ? socket.create(destination.family, socket.SOCK_STREAM) : null;
@@ -243,12 +263,13 @@ function proxy_request(method, path, authorization, body) {
 		return null;
 	}
 
+	let target_uri = length(query) ? `${API_PREFIX}${path}?${query}` : `${API_PREFIX}${path}`;
 	let request = [
-		`${method} ${API_PREFIX}${path} HTTP/1.1`,
+		`${method} ${target_uri} HTTP/1.1`,
 		'Host: 127.0.0.1:8083',
 		'Accept: application/json',
 		`Authorization: ${authorization}`,
-		'User-Agent: luci-app-hop/0.2.9',
+		'User-Agent: luci-app-hop/0.3.0',
 		'Connection: close'
 	];
 
@@ -328,7 +349,7 @@ return {
 			return;
 		}
 
-		if (length(query) || !allowed_request(method, path)) {
+		if (!allowed_query(method, path, query) || !allowed_request(method, path)) {
 			json_error(404, 'Not Found', 'not_found', 'Unknown Hop Control API operation');
 			return;
 		}
@@ -355,7 +376,7 @@ return {
 			return;
 		}
 
-		let response = proxy_request(method, path, authorization, body);
+		let response = proxy_request(method, path, query, authorization, body);
 		if (!response) {
 			json_error(502, 'Bad Gateway', 'upstream_unavailable', 'Hop Control API is unavailable');
 			return;
