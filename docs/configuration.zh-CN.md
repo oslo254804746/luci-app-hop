@@ -155,7 +155,7 @@ session_retention_days = 30
 
 在网页或本地 CLI 创建的资源归属为 `local`，可以在面板中编辑。直接写入启动配置的资源归属为 `config`，面板会只读展示，需要修改 `/etc/hop/config.toml` 后重启。
 
-例如在 TOML 中声明一个资产：
+例如在 TOML 中声明一个资产（同样支持 `via_asset`、`allow_tcp_forwarding`、`[probe]` 与 `[notifications.<name>]`）：
 
 ```toml
 [assets.router]
@@ -163,9 +163,10 @@ type = "ssh"
 host = "192.168.1.1"
 port = 22
 display_name = "Main router"
+allow_tcp_forwarding = true
 ```
 
-对于包含密码、私钥或入口公钥的完整配置，请参考 [Hop 配置参考](https://github.com/oslo254804746/hop-rs/blob/master/docs/configuration.zh-CN.md)。
+对于包含密码、私钥、托管 `-L`/`-D` 端口转发、TUI 选机 SFTP 跟随或入口公钥的完整配置，请参考 [Hop 配置参考](https://github.com/oslo254804746/hop-rs/blob/master/docs/configuration.zh-CN.md) 与 [SSH 与 TCP 代理指南](https://github.com/oslo254804746/hop-rs/blob/master/docs/proxying.zh-CN.md)。
 
 ## 防火墙、备份与排错
 
